@@ -1,0 +1,16 @@
+{
+  "name": "초록 보카",
+  "short_name": "초록 보카",
+  "description": "TOEFL 초록 단어책을 하루 10개씩 카드로 외우는 간격 반복 단어장",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1f4ef",
+  "theme_color": "#1b7a4b",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>초록 보카</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="초록 보카">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f1f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1411" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400..700&display=swap">
+<style>
+:root{
+  --bg:#f1f4ef; --surface:#ffffff; --surface-2:#e7ede5; --ink:#15231a; --ink-2:#48584d; --ink-3:#78877d; --line:#d6ded5;
+  --accent:#1b7a4b; --accent-strong:#135b37; --accent-ink:#ffffff; --accent-soft:#d9eddf; --accent-mid:#9fcfb2;
+  --dont:#c24c36; --dont-soft:#f8e1db; --hole:#e3e9e1;
+  --card-shadow:0 1px 2px rgb(21 35 26 / .07),0 24px 44px -20px rgb(21 35 26 / .32);
+  --soft-shadow:0 1px 2px rgb(21 35 26 / .05),0 10px 24px -16px rgb(21 35 26 / .22);
+  --f-serif:"Newsreader","Iowan Old Style","Palatino Linotype",Georgia,serif;
+  --f-sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --r:20px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0e1411; --surface:#161f1a; --surface-2:#202a24; --ink:#e5eee8; --ink-2:#a7b6ac; --ink-3:#7a897f; --line:#2a362f;
+    --accent:#45b67f; --accent-strong:#63cd97; --accent-ink:#04200f; --accent-soft:#17301f; --accent-mid:#2c6446;
+    --dont:#ef7a63; --dont-soft:#361b15; --hole:#0e1411;
+    --card-shadow:0 1px 2px rgb(0 0 0 / .45),0 24px 44px -20px rgb(0 0 0 / .75);
+    --soft-shadow:0 1px 2px rgb(0 0 0 / .35),0 10px 24px -16px rgb(0 0 0 / .6);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0e1411; --surface:#161f1a; --surface-2:#202a24; --ink:#e5eee8; --ink-2:#a7b6ac; --ink-3:#7a897f; --line:#2a362f;
+  --accent:#45b67f; --accent-strong:#63cd97; --accent-ink:#04200f; --accent-soft:#17301f; --accent-mid:#2c6446;
+  --dont:#ef7a63; --dont-soft:#361b15; --hole:#0e1411;
+  --card-shadow:0 1px 2px rgb(0 0 0 / .45),0 24px 44px -20px rgb(0 0 0 / .75);
+  --soft-shadow:0 1px 2px rgb(0 0 0 / .35),0 10px 24px -16px rgb(0 0 0 / .6);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+html{-webkit-text-size-adjust:100%;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+button,label,.chip,.dt{touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.stage{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-sans);font-size:15px;line-height:1.5;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:disabled{cursor:default}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+.app{max-width:520px;margin:0 auto;min-height:100%;display:flex;flex-direction:column}
+.mono{font-family:var(--f-mono)}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+
+/* header */
+.top::before{content:"";position:absolute;left:-16px;right:-16px;bottom:100%;height:env(safe-area-inset-top,0px);background:var(--bg)}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-block:14px 10px;background:var(--bg)}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:17px;letter-spacing:-.02em}
+.brand svg{width:24px;height:24px;flex:none}
+.nav{display:flex;gap:2px}
+.nav button{padding:7px 12px;border-radius:999px;font-size:14px;font-weight:500;color:var(--ink-2)}
+.nav button[aria-current="page"]{background:var(--surface-2);color:var(--ink)}
+
+.view{display:flex;flex-direction:column;gap:18px;padding-block:6px 48px}
+.panel{background:var(--surface);border-radius:var(--r);box-shadow:var(--soft-shadow)}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:6px}
+.sec-head h2{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.sec-head span{font-size:13px;color:var(--ink-3)}
+
+/* buttons */
+.cta{background:var(--accent);color:var(--accent-ink);border-radius:14px;padding:15px 18px;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s,background-color .2s;width:100%}
+.cta:hover:not(:disabled){background:var(--accent-strong)}
+.cta:active:not(:disabled){transform:scale(.985)}
+.cta:disabled{opacity:.55}
+.ghost{border:1px solid var(--line);border-radius:14px;padding:13px 16px;font-weight:500;background:var(--surface);display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
+.ghost:hover:not(:disabled){background:var(--surface-2)}
+.ghost.sm{width:auto;padding:8px 12px;border-radius:10px;font-size:14px}
+.link{color:var(--ink-2);font-size:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 4px}
+.link:disabled{opacity:.4}
+
+/* home */
+.today{padding:20px;display:flex;flex-direction:column;gap:16px}
+.today-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.today-head h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.save{font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.save i{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
+.save.ok i{background:var(--accent)}
+.save.err i{background:var(--dont)}
+.nums{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.num{background:var(--surface-2);border-radius:14px;padding:12px 14px 11px;display:flex;flex-direction:column;gap:2px}
+.num b{font-family:var(--f-serif);font-size:42px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums lining-nums;letter-spacing:-.02em}
+.num span{font-size:13px;color:var(--ink-2)}
+.today-sub{font-size:13.5px;color:var(--ink-2);margin-top:-4px}
+.today-sub b{font-family:var(--f-serif);font-weight:600;color:var(--ink);font-size:15px}
+.today-done{display:flex;flex-direction:column;gap:10px}
+.done-line{display:flex;align-items:center;gap:10px;font-weight:600}
+.done-line svg{width:22px;height:22px;color:var(--accent);flex:none}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:14px 10px}
+.wk{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--ink-3)}
+.wk i{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;color:var(--accent-ink)}
+.wk i svg{width:15px;height:15px;opacity:0}
+.wk.part i{border-color:var(--accent-mid);background:var(--accent-soft)}
+.wk.done i{border-color:var(--accent);background:var(--accent)}
+.wk.done i svg{opacity:1}
+.wk.is-today span{color:var(--ink);font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{padding:12px 12px 11px;display:flex;flex-direction:column;gap:1px}
+.stat b{font-family:var(--f-serif);font-size:26px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums lining-nums}
+.stat span{font-size:12.5px;color:var(--ink-2)}
+.days{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.dt{background:var(--surface);border-radius:12px;padding:10px 9px 10px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--soft-shadow);text-align:left;transition:transform .12s}
+.dt:active{transform:scale(.97)}
+.dt b{font-family:var(--f-mono);font-size:13px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.dt b svg{width:13px;height:13px;color:var(--accent)}
+.mb{height:5px;border-radius:5px;background:var(--surface-2);overflow:hidden;display:flex}
+.mb i{display:block;height:100%}
+.mb .m{background:var(--accent)}
+.mb .l{background:var(--accent-mid)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-3)}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:10px;height:5px;border-radius:3px;display:block}
+
+/* study */
+.st-top{display:flex;align-items:center;gap:12px;padding-block:12px 2px}
+.icon-btn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--ink-2);flex:none}
+.icon-btn:hover{background:var(--surface-2)}
+.icon-btn svg{width:22px;height:22px}
+.progress{flex:1;height:8px;border-radius:8px;background:var(--surface-2);overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--accent);border-radius:8px;transition:width .3s}
+.st-count{font-family:var(--f-mono);font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums;min-width:58px;text-align:right}
+.st-info{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;color:var(--ink-2);min-height:26px}
+.tag{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent-strong)}
+.tag.rev{background:var(--surface-2);color:var(--ink-2)}
+.tag.again{background:var(--dont-soft);color:var(--dont)}
+.tag.prac{background:var(--surface-2);color:var(--ink-2)}
+.stage{position:relative;height:min(58vh,470px);min-height:330px;margin-top:4px}
+.deck{position:absolute;inset:0;border-radius:var(--r);background:var(--surface);box-shadow:var(--soft-shadow)}
+.deck.d1{transform:translateY(9px) scale(.965);opacity:.75}
+.deck.d2{transform:translateY(18px) scale(.93);opacity:.45}
+.drag{position:absolute;inset:0;touch-action:pan-y;perspective:1400px}
+.card{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .46s cubic-bezier(.2,.75,.25,1);cursor:pointer;border-radius:var(--r);outline:none}
+.card.flipped{transform:rotateY(180deg)}
+.card:focus-visible .face{outline:2px solid var(--accent);outline-offset:3px}
+.face{position:absolute;inset:0;border-radius:var(--r);background:var(--surface);box-shadow:var(--card-shadow);backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;padding:18px 20px 20px;overflow:hidden}
+.face.back{transform:rotateY(180deg);overflow-y:auto;overscroll-behavior:contain}
+.idx{display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;color:var(--ink-3);min-height:24px;padding-right:44px}
+.hole{width:15px;height:15px;border-radius:50%;background:var(--hole);box-shadow:inset 0 1.5px 2.5px rgb(0 0 0 / .28);flex:none;margin-right:4px}
+.speak{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--ink-2);z-index:2}
+.speak:hover{background:var(--surface-2)}
+.speak svg{width:22px;height:22px}
+.hw{font-family:var(--f-serif);font-weight:560;font-size:clamp(36px,10.5vw,52px);letter-spacing:-.015em;line-height:1.08;text-align:center;margin:auto 0;text-wrap:balance;overflow-wrap:anywhere;padding-inline:4px}
+.hw.long{font-size:clamp(28px,8vw,40px)}
+.kf{margin:auto 0;display:flex;flex-direction:column;gap:12px;text-align:center}
+.kf p{font-size:clamp(22px,6.4vw,28px);font-weight:600;line-height:1.35;letter-spacing:-.01em;text-wrap:balance}
+.kf p small{display:block;font-family:var(--f-mono);font-size:12px;color:var(--accent);font-weight:500;letter-spacing:.06em}
+.hint{text-align:center;font-size:13px;color:var(--ink-3)}
+.bk{display:flex;flex-direction:column;padding-top:10px}
+.bk-word{font-family:var(--f-serif);font-size:28px;font-weight:600;line-height:1.15;letter-spacing:-.01em;padding-bottom:12px;border-bottom:2px solid var(--accent-soft);overflow-wrap:anywhere}
+.senses{display:flex;flex-direction:column;gap:14px;padding-top:14px}
+.senses li{display:flex;gap:10px}
+.senses .no{font-family:var(--f-mono);font-size:12px;color:var(--accent);font-weight:500;padding-top:6px;width:14px;flex:none}
+.ko{font-size:19.5px;font-weight:600;line-height:1.4;letter-spacing:-.01em;text-wrap:pretty}
+.en{font-family:var(--f-serif);font-size:17px;color:var(--ink-2);line-height:1.4;margin-top:2px}
+.syn{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.1em;color:var(--ink-3);margin-right:7px;text-transform:uppercase;vertical-align:1px}
+.note{margin-top:16px;font-size:14px;color:var(--ink-2);background:var(--surface-2);border-radius:12px;padding:10px 12px;line-height:1.5}
+.note b{display:block;font-size:11.5px;font-weight:600;color:var(--ink-3);margin-bottom:2px}
+.fixnote{margin-top:10px;font-size:12px;color:var(--ink-3)}
+.stamp{position:absolute;top:30px;padding:5px 14px;border-radius:10px;border:3px solid;font-weight:700;font-size:21px;opacity:0;pointer-events:none;z-index:3;background:var(--surface);letter-spacing:-.01em}
+.s-know{left:22px;color:var(--accent);border-color:var(--accent);transform:rotate(-9deg)}
+.s-dont{right:22px;color:var(--dont);border-color:var(--dont);transform:rotate(9deg)}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
+.ans{border-radius:16px;padding:16px 12px;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .12s,filter .2s}
+.ans:active{transform:scale(.97)}
+.ans.dont{background:var(--dont-soft);color:var(--dont)}
+.ans.know{background:var(--accent);color:var(--accent-ink)}
+.ans:hover{filter:brightness(.97)}
+kbd{font-family:var(--f-mono);font-size:12px;border:1px solid currentColor;border-radius:6px;padding:0 6px;opacity:.6;font-weight:500}
+.st-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px}
+.keys{font-size:12px;color:var(--ink-3)}
+@media (hover:none){.ans kbd,.keys{display:none}}
+
+/* done */
+.done-card{padding:26px 20px 22px;display:flex;flex-direction:column;gap:14px;align-items:center;text-align:center}
+.done-card h1{font-size:26px;font-weight:700;letter-spacing:-.02em}
+.done-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+.done-stats div{background:var(--surface-2);border-radius:14px;padding:12px 6px;display:flex;flex-direction:column}
+.done-stats b{font-family:var(--f-serif);font-size:30px;font-weight:600;line-height:1.05;font-variant-numeric:tabular-nums lining-nums}
+.done-stats span{font-size:12.5px;color:var(--ink-2)}
+.done-note{font-size:14px;color:var(--ink-2)}
+.done-actions{display:flex;flex-direction:column;gap:10px}
+
+/* word list */
+.w-head{display:flex;flex-direction:column;gap:12px}
+.w-head h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+input[type=search]{width:100%;font:inherit;font-size:16px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);-webkit-appearance:none;appearance:none}
+input[type=search]::placeholder{color:var(--ink-3)}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding:2px 16px 6px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;font-family:var(--f-mono);font-size:13px;padding:7px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.w-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.w-bar span{font-size:13.5px;color:var(--ink-2)}
+.wlist{display:flex;flex-direction:column;overflow:hidden}
+.wrow{display:grid;grid-template-columns:30px 1fr auto;gap:2px 10px;padding:13px 14px;border-top:1px solid var(--line)}
+.wrow:first-child{border-top:0}
+.wrow .no{font-family:var(--f-mono);font-size:12px;color:var(--ink-3);padding-top:5px;font-variant-numeric:tabular-nums}
+.wrow .w{font-family:var(--f-serif);font-weight:600;font-size:19px;line-height:1.25;display:flex;align-items:center;gap:4px;flex-wrap:wrap;overflow-wrap:anywhere}
+.wrow .w .say{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--ink-3)}
+.wrow .w .say:hover{background:var(--surface-2);color:var(--ink)}
+.wrow .w .say svg{width:17px;height:17px}
+.wrow .k{font-size:14.5px;line-height:1.5;grid-column:2/4}
+.wrow .e{font-family:var(--f-serif);font-size:15px;color:var(--ink-2);line-height:1.4;grid-column:2/4}
+.wrow .e + .k{margin-top:5px}
+.wrow .x{font-size:12.5px;color:var(--ink-3);grid-column:2/4;margin-top:2px}
+.wrow .dayno{font-family:var(--f-mono);font-size:11px;color:var(--ink-3)}
+.pill{font-size:11.5px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap;align-self:start;margin-top:3px}
+.p-new{background:var(--surface-2);color:var(--ink-3)}
+.p-learn{background:var(--accent-soft);color:var(--accent-strong)}
+.p-master{background:var(--accent);color:var(--accent-ink)}
+.empty{padding:28px 16px;text-align:center;color:var(--ink-3);font-size:14px}
+
+/* settings */
+.set-group{display:flex;flex-direction:column}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:12px 14px;padding:14px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.set-row:first-child{border-top:0}
+.set-row b{display:block;font-weight:600}
+.set-row .d{display:block;font-size:13px;color:var(--ink-2)}
+.seg{display:flex;background:var(--surface-2);border-radius:11px;padding:3px;gap:2px}
+.seg button{padding:7px 11px;border-radius:8px;font-size:14px;font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums;min-width:40px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .14)}
+select{font:inherit;font-size:16px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.switch{position:relative;width:48px;height:28px;flex:none}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.switch i{position:absolute;inset:0;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);transition:background-color .2s;pointer-events:none}
+.switch i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgb(0 0 0 / .25);transition:transform .2s}
+.switch input:checked + i{background:var(--accent);border-color:var(--accent)}
+.switch input:checked + i::after{transform:translateX(20px)}
+.switch input:focus-visible + i{outline:2px solid var(--accent);outline-offset:3px}
+.confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 14px;font-size:14px;color:var(--dont)}
+.danger-btn{background:var(--dont);color:#fff;border-radius:10px;padding:8px 12px;font-size:14px;font-weight:600}
+.about{font-size:13px;color:var(--ink-3);line-height:1.6;padding-inline:4px}
+.about b{color:var(--ink-2);font-weight:600}
+#v-setup{padding-top:18px}
+.setup{padding:22px 20px;display:flex;flex-direction:column;gap:14px}
+.setup h1{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.setup p{font-size:14.5px;color:var(--ink-2);line-height:1.6}
+.setup p b{color:var(--ink)}
+.steps{display:flex;flex-direction:column;gap:8px;counter-reset:st}
+.steps li{display:flex;gap:10px;font-size:14px;color:var(--ink-2);line-height:1.5}
+.steps li::before{counter-increment:st;content:counter(st);flex:none;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent-strong);font-weight:700;font-size:12px;display:grid;place-items:center;margin-top:1px}
+.msg{font-size:14px;font-weight:600;color:var(--accent-strong)}
+.msg.err{color:var(--dont)}
+.install{font-size:13.5px;color:var(--ink-2);background:var(--accent-soft);border-radius:14px;padding:11px 14px;line-height:1.55}
+.install b{color:var(--accent-strong)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:500;z-index:50;max-width:calc(100% - 32px);box-shadow:var(--soft-shadow)}
+
+@media (max-width:380px){
+  .days{grid-template-columns:repeat(5,1fr)}
+  .num b{font-size:36px}
+}
+@media (prefers-reduced-motion:reduce){
+  .card,.progress i,.cta,.ans,.dt{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top" id="top">
+    <button class="brand" id="brandBtn" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="3.4" fill="var(--accent)"/><circle cx="7" cy="8.4" r="1.7" fill="var(--bg)"/><path d="M7.5 15.6h9M11 12.2h5.5" stroke="var(--accent-ink)" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <span>초록 보카</span>
+    </button>
+    <nav class="nav" aria-label="메뉴">
+      <button id="navHome" type="button" aria-current="page">오늘</button>
+      <button id="navWords" type="button">단어장</button>
+      <button id="navSettings" type="button">설정</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="view" id="v-setup" hidden>
+      <div class="panel setup">
+        <p class="eyebrow">처음 한 번만</p>
+        <h1>단어 파일 불러오기</h1>
+        <p>Mac에서 iCloud Drive에 넣어둔 <b>chorok-voca-data.json</b>을 골라주세요. 한 번 불러오면 인터넷 없이도 이 폰에서 계속 쓸 수 있어요.</p>
+        <ol class="steps"><li>아래 ‘파일 선택’을 누르고 ‘찾아보기’로 가요</li><li>iCloud Drive에서 chorok-voca-data.json을 눌러요</li></ol>
+        <label class="cta" for="dataFile">파일 선택</label>
+        <input type="file" id="dataFile" class="vh">
+        <p class="msg" id="setupMsg" hidden></p>
+        <p class="install" id="setupInstall" hidden><b>먼저 홈 화면에 추가해 주세요.</b> 여기서 불러오면 홈 화면 앱에는 옮겨지지 않아요. Chrome 주소창 오른쪽 공유 버튼 → ‘홈 화면에 추가’ 후, 홈 화면의 초록 보카 아이콘으로 열어서 불러오세요.</p>
+        <button class="ghost" id="setupCancel" type="button" hidden>취소</button>
+      </div>
+    </section>
+
+    <section class="view" id="v-home" hidden>
+      <p class="install" id="installHint" hidden><b>앱처럼 쓰려면</b> Chrome 주소창 오른쪽 공유 버튼 → ‘홈 화면에 추가’를 눌러요. 그다음부터는 홈 화면 아이콘으로 여세요.</p>
+      <p class="eyebrow" id="homeDate"></p>
+      <div class="panel today">
+        <div class="today-head"><h1>오늘의 카드</h1><span class="save" id="saveState"><i></i><span>기록 불러오는 중</span></span></div>
+        <div class="nums">
+          <div class="num"><b id="nRev">0</b><span>복습할 카드</span></div>
+          <div class="num"><b id="nNew">0</b><span>새 단어</span></div>
+        </div>
+        <p class="today-sub" id="todaySub"></p>
+        <button class="cta" id="startBtn" type="button" disabled>기록 불러오는 중…</button>
+        <div class="today-done" id="todayDone" hidden>
+          <p class="done-line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M7.8 12.4l2.8 2.8 5.6-5.8"/></svg><span>오늘 카드를 모두 끝냈어요</span></p>
+          <button class="cta" id="moreBtn" type="button">새 단어 10개 더</button>
+          <button class="ghost" id="missBtn" type="button" hidden>오늘 틀린 단어 연습</button>
+        </div>
+      </div>
+      <div class="panel week" id="week" aria-label="최근 7일 학습"></div>
+      <div class="stats">
+        <div class="panel stat"><b id="sStreak">0</b><span>연속 학습일</span></div>
+        <div class="panel stat"><b id="sSeen">0</b><span>학습한 단어</span></div>
+        <div class="panel stat"><b id="sMaster">0</b><span>암기 완료</span></div>
+      </div>
+      <div class="sec-head"><h2>Day별 진도</h2><span id="totalWords"></span></div>
+      <div class="days" id="dayGrid"></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>암기 완료</span><span><i style="background:var(--accent-mid)"></i>학습 중</span></div>
+    </section>
+
+    <section class="view" id="v-study" hidden>
+      <div class="st-top">
+        <button class="icon-btn" id="quitBtn" type="button" aria-label="학습 멈추기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="progress" role="progressbar" aria-label="진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progBar"><i id="progFill"></i></div>
+        <span class="st-count" id="stCount">0 / 0</span>
+      </div>
+      <div class="st-info"><span class="tag" id="stTag">새 단어</span><span id="stLeft"></span></div>
+      <div class="stage" id="stage">
+        <div class="deck d2" id="deck2"></div>
+        <div class="deck d1" id="deck1"></div>
+        <div class="drag" id="drag">
+          <div class="card" id="card" tabindex="0" role="button" aria-label="카드 뒤집기">
+            <div class="face front" id="front"></div>
+            <div class="face back" id="back"></div>
+          </div>
+          <div class="stamp s-know" id="stampK">알아요</div>
+          <div class="stamp s-dont" id="stampD">몰라요</div>
+        </div>
+      </div>
+      <div class="answers">
+        <button class="ans dont" id="dontBtn" type="button"><span>몰라요</span><kbd>←</kbd></button>
+        <button class="ans know" id="knowBtn" type="button"><span>알아요</span><kbd>→</kbd></button>
+      </div>
+      <div class="st-foot">
+        <button class="link" id="undoBtn" type="button" disabled><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6.5L4.5 11 9 15.5"/><path d="M5 11h9.5a5 5 0 0 1 0 10H12"/></svg>되돌리기</button>
+        <span class="keys">Space 뒤집기 · S 발음 · Z 되돌리기</span>
+      </div>
+    </section>
+
+    <section class="view" id="v-done" hidden>
+      <div class="panel done-card">
+        <p class="eyebrow" id="doneEyebrow">오늘의 카드</p>
+        <h1 id="doneTitle">오늘 학습 완료</h1>
+        <div class="done-stats">
+          <div><b id="dA">0</b><span id="dAl">새 단어</span></div>
+          <div><b id="dB">0</b><span id="dBl">복습</span></div>
+          <div><b id="dC">0%</b><span>한 번에 맞힘</span></div>
+        </div>
+        <p class="done-note" id="doneNote"></p>
+      </div>
+      <div id="missWrap" hidden>
+        <div class="sec-head"><h2>다시 본 단어</h2><span id="missN"></span></div>
+        <ul class="panel wlist" id="missList" style="margin-top:10px"></ul>
+      </div>
+      <div class="done-actions">
+        <button class="cta" id="doneMore" type="button">새 단어 10개 더</button>
+        <button class="ghost" id="donePractice" type="button" hidden>다시 본 단어만 연습</button>
+        <button class="ghost" id="doneHome" type="button">홈으로</button>
+      </div>
+    </section>
+
+    <section class="view" id="v-words" hidden>
+      <div class="w-head">
+        <h1>단어장</h1>
+        <input type="search" id="q" placeholder="단어나 뜻으로 검색" autocomplete="off" aria-label="단어 검색">
+      </div>
+      <div class="chips" id="dayChips" role="group" aria-label="Day 선택"></div>
+      <div class="w-bar"><span id="wInfo"></span><button class="ghost sm" id="practiceDay" type="button">이 Day 카드로 연습</button></div>
+      <ul class="panel wlist" id="wordList"></ul>
+    </section>
+
+    <section class="view" id="v-settings" hidden>
+      <div class="w-head"><h1>설정</h1></div>
+      <div class="panel set-group">
+        <div class="set-row"><div><b>하루 새 단어</b><span class="d">매일 새로 나오는 카드 수</span></div><div class="seg" id="segDaily" role="group" aria-label="하루 새 단어 수"></div></div>
+        <div class="set-row"><div><b>카드 앞면</b><span class="d">앞면에 보여줄 쪽</span></div><div class="seg" id="segFront" role="group" aria-label="카드 앞면"><button type="button" data-v="en">영어 단어</button><button type="button" data-v="ko">한국어 뜻</button></div></div>
+        <div class="set-row"><div><b>발음 자동 재생</b><span class="d">카드가 나올 때 영어 발음 듣기</span></div><label class="switch"><input type="checkbox" id="ttsAuto" aria-label="발음 자동 재생"><i></i></label></div>
+        <div class="set-row"><div><b>새 단어 시작 Day</b><span class="d">이미 외운 Day는 건너뛰기</span></div><select id="startDay" aria-label="새 단어 시작 Day"></select></div>
+      </div>
+      <div class="panel set-group">
+        <div class="set-row"><div><b>저장 위치</b><span class="d" id="storeInfo"></span></div></div>
+        <div class="set-row"><div><b>기록 백업</b><span class="d">백업 파일을 iCloud Drive 등에 저장해 두기</span></div><button class="ghost sm" id="backupBtn" type="button">백업하기</button></div>
+        <div class="set-row"><div><b>백업 불러오기</b><span class="d">백업 파일로 기록 되돌리기</span></div><label class="ghost sm" for="restoreFile">불러오기</label><input type="file" id="restoreFile" class="vh"></div>
+        <div class="set-row"><div><b>단어 파일 다시 불러오기</b><span class="d">단어 목록을 새로 받았을 때</span></div><button class="ghost sm" id="reimportBtn" type="button">불러오기</button></div>
+      </div>
+      <div class="panel set-group">
+        <div class="set-row"><div><b>학습 기록 초기화</b><span class="d">진도와 연속 기록을 모두 지웁니다</span></div><button class="ghost sm" id="resetBtn" type="button">초기화</button></div>
+        <div class="confirm" id="resetConfirm" hidden><span>정말 지울까요? 되돌릴 수 없어요.</span><button class="danger-btn" id="resetYes" type="button">지우기</button><button class="ghost sm" id="resetNo" type="button">취소</button></div>
+      </div>
+      <p class="about" id="about"></p>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+'use strict';
+/* ---------- data ---------- */
+const WORDS_KEY = 'chorok-voca-words-v1';
+let WORDS = [], BY_ID = new Map(), DAYS = [], DAY_WORDS = new Map();
+function validRows(rows) {
+  return Array.isArray(rows) && rows.length > 0 && rows.every(r => Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && typeof r[2] === 'string' && Array.isArray(r[3]) && r[3].every(s => Array.isArray(s) && s.length === 2));
+}
+function initData(rows) {
+  WORDS = rows.map(r => ({ d: r[0], n: r[1], w: r[2], s: r[3], note: r[4] || '', fix: r[5] || '', id: r[0] + '-' + r[1] }));
+  BY_ID = new Map(WORDS.map(e => [e.id, e]));
+  DAYS = [...new Set(WORDS.map(e => e.d))].sort((a, b) => a - b);
+  DAY_WORDS = new Map(DAYS.map(d => [d, WORDS.filter(e => e.d === d)]));
+  if (!DAYS.includes(wDay)) wDay = DAYS[0];
+}
+function loadWords() {
+  try { const o = JSON.parse(localStorage.getItem(WORDS_KEY) || 'null'); return o && validRows(o.words) ? o.words : null; } catch (e) { return null; }
+}
+const INTERVAL = [0, 1, 2, 4, 8, 16, 32, 64];   // box -> days until next review
+const MAXBOX = INTERVAL.length - 1, MASTER = 5;
+const DAILY_OPTS = [5, 10, 15, 20, 30];
+
+/* ---------- helpers ---------- */
+const DAYMS = 864e5, SHIFT = 4 * 36e5;            // a study day rolls over at 4am
+const dayNum = (t = Date.now()) => { const d = new Date(t - SHIFT); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / DAYMS); };
+const dayKey = n => new Date(n * DAYMS).toISOString().slice(0, 10);
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad2 = n => String(n).padStart(2, '0');
+const fmt = n => n.toLocaleString('ko-KR');
+const CIRC = ['①', '②', '③', '④', '⑤', '⑥'];
+const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const ICON = {
+  speaker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.4L12 18.4V5.6L7.4 9.5H4z"/><path d="M15.6 9.2a4 4 0 0 1 0 5.6"/><path d="M18.1 6.7a7.6 7.6 0 0 1 0 10.6"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 12.5l4 4L18.5 7.5"/></svg>'
+};
+
+/* ---------- speech ---------- */
+const hasTTS = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function';
+let voice = null;
+function pickVoice() {
+  try {
+    const vs = speechSynthesis.getVoices();
+    const us = vs.filter(v => /^en[-_]US/i.test(v.lang));
+    voice = us.find(v => /Samantha|Google US English|Ava|Allison|Aaron|Nicky/i.test(v.name)) || us[0] || vs.find(v => /^en/i.test(v.lang)) || null;
+  } catch (e) { voice = null; }
+}
+if (hasTTS) { pickVoice(); try { speechSynthesis.addEventListener('voiceschanged', pickVoice); } catch (e) {} }
+function say(text) {
+  if (!hasTTS || !text) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/~/g, ' '));
+    u.lang = 'en-US'; u.rate = 0.9; if (voice) u.voice = voice;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+/* ---------- storage: claude.ai account (db) with a browser fallback ---------- */
+const LS_KEY = 'chorok-voca-v1';
+const newMeta = () => ({ v: 1, daily: 10, front: 'en', tts: false, start: 1, nt: null, days: {} });
+function cleanProg(p) {
+  const out = {};
+  if (p && typeof p === 'object') for (const [k, v] of Object.entries(p)) if (Array.isArray(v) && v.length >= 5 && (BY_ID.size === 0 || BY_ID.has(k))) out[k] = v.slice(0, 5).map(Number);
+  return out;
+}
+function newer(a, b) {   // pick the more recent of two word states
+  if (a[4] !== b[4]) return a[4] > b[4] ? a : b;
+  const ra = a[2] + a[3], rb = b[2] + b[3];
+  if (ra !== rb) return ra > rb ? a : b;
+  return a[1] >= b[1] ? a : b;
+}
+function mergeProg(cloud, local) {
+  const out = Object.assign({}, cloud);
+  for (const [k, v] of Object.entries(local)) out[k] = out[k] ? newer(out[k], v) : v;
+  return out;
+}
+function mergeMeta(cloud, local) {
+  const out = Object.assign(newMeta(), cloud, { days: Object.assign({}, cloud.days || {}) });
+  if (local.nt && (!out.nt || local.nt.d > out.nt.d)) out.nt = local.nt;
+  else if (local.nt && out.nt && local.nt.d === out.nt.d) out.nt = { d: out.nt.d, ids: [...new Set([...(out.nt.ids || []), ...(local.nt.ids || [])])] };
+  for (const [k, v] of Object.entries(local.days || {})) {
+    const c = out.days[k];
+    if (!c || (v.t || 0) > (c.t || 0)) out.days[k] = v;
+    else if (v.done) out.days[k] = Object.assign({}, c, { done: true });
+  }
+  return out;
+}
+const Store = {
+  mode: 'loading', prog: {}, meta: newMeta(), dirtyW: {}, dirtyM: false, timer: 0,
+  chain: Promise.resolve(), refs: null, hasP: false, state: 'idle',
+  loadLocal() {
+    try {
+      const o = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+      if (o && typeof o === 'object') { this.prog = cleanProg(o.prog); this.meta = Object.assign(newMeta(), o.meta || {}); }
+    } catch (e) {}
+  },
+  saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify({ prog: this.prog, meta: this.meta })); } catch (e) {} },
+  setWord(id, st) {
+    if (st) this.prog[id] = st; else delete this.prog[id];
+    this.dirtyW[id] = st || null;
+    this.schedule();
+  },
+  touchMeta() { this.dirtyM = true; this.schedule(); },
+  schedule(ms = 1800) {
+    this.saveLocal();
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.flush(), ms);
+  },
+  flush() {
+    clearTimeout(this.timer);
+    this.saveLocal();
+    if (this.mode !== 'cloud') return this.chain;
+    const w = this.dirtyW, m = this.dirtyM;
+    this.dirtyW = {}; this.dirtyM = false;
+    if (!Object.keys(w).length && !m) return this.chain;
+    setSave('saving');
+    this.chain = this.chain.then(async () => {
+      try {
+        if (Object.keys(w).length) {
+          if (!this.hasP) { await this.refs.p.set({ w: this.prog }); this.hasP = true; }
+          else await this.refs.p.update({ w });
+        }
+        if (m) await this.refs.m.set(JSON.parse(JSON.stringify(this.meta)));
+        setSave(Object.keys(this.dirtyW).length || this.dirtyM ? 'saving' : 'ok');
+      } catch (e) {
+        for (const [k, v] of Object.entries(w)) if (!(k in this.dirtyW)) this.dirtyW[k] = v;
+        if (m) this.dirtyM = true;
+        setSave('err');
+        const code = e && e.code;
+        if (code !== 'revoked' && code !== 'not_granted' && code !== 'invalid_argument') {
+          clearTimeout(this.timer);
+          this.timer = setTimeout(() => this.flush(), 4000 + Math.random() * 3000);
+        }
+      }
+    });
+    return this.chain;
+  },
+  async connect() {
+    const cl = window.claude;
+    if (!cl || typeof cl.use !== 'function') { this.mode = 'local'; return; }
+    try {
+      const [db, user] = await Promise.all([cl.use('db'), cl.use('user')]);
+      const uid = db && user ? await user.id() : null;
+      if (!uid) { this.mode = 'local'; return; }
+      const base = 'data/users/' + uid;
+      const p = db.doc(base + '/progress'), m = db.doc(base + '/meta');
+      const [ps, ms] = await Promise.all([p.get(), m.get()]);
+      this.refs = { p, m };
+      const cloudW = ps.exists ? cleanProg((ps.data() || {}).w) : {};
+      const merged = mergeProg(cloudW, this.prog);
+      for (const [k, v] of Object.entries(merged)) if (!cloudW[k] || cloudW[k].join() !== v.join()) this.dirtyW[k] = v;
+      this.prog = merged;
+      this.hasP = ps.exists;
+      this.meta = ms.exists ? mergeMeta(ms.data() || {}, this.meta) : this.meta;
+      this.dirtyM = true;
+      this.mode = 'cloud';
+      this.flush();
+    } catch (e) {
+      console.warn('[초록 보카] 계정 저장소를 쓸 수 없어 이 브라우저에 저장합니다.', e);
+      this.mode = 'local';
+    }
+  }
+};
+function setSave(state) {
+  Store.state = state;
+  const el = $('saveState');
+  const [cls, text] = Store.mode === 'loading' ? ['', '기록 불러오는 중']
+    : Store.mode === 'local' ? ['ok', '이 폰에 저장됨']
+    : state === 'saving' ? ['', '저장 중…']
+    : state === 'err' ? ['err', '저장 실패 · 다시 시도 중']
+    : ['ok', '계정에 저장됨'];
+  el.className = 'save ' + cls;
+  el.lastElementChild.textContent = text;
+}
+
+/* ---------- scheduling ---------- */
+function pickNew(k, exclude = new Set()) {
+  const out = [], start = Store.meta.start || 1;
+  const order = WORDS.filter(e => e.d >= start).concat(WORDS.filter(e => e.d < start));
+  for (const e of order) {
+    if (out.length >= k) break;
+    if (!Store.prog[e.id] && !exclude.has(e.id)) out.push(e.id);
+  }
+  return out;
+}
+function todayPlan() {
+  const T = dayNum(), m = Store.meta, prog = Store.prog;
+  const nt = m.nt && m.nt.d === T ? m.nt.ids.filter(id => BY_ID.has(id)) : null;
+  const ntSet = new Set(nt || []);
+  let rev = 0;
+  for (const e of WORDS) { const st = prog[e.id]; if (st && st[1] <= T && !ntSet.has(e.id)) rev++; }
+  const planned = nt || pickNew(m.daily);
+  const newLeft = planned.filter(id => !prog[id] || prog[id][1] <= T).length;
+  return { T, planned, rev, newLeft };
+}
+function dayStats(T) {
+  const k = dayKey(T);
+  return Store.meta.days[k] || (Store.meta.days[k] = { n: 0, r: 0, ok: 0, t: 0, done: false, miss: [] });
+}
+function streak() {
+  const T = dayNum(), days = Store.meta.days;
+  let t = days[dayKey(T)] && days[dayKey(T)].done ? T : T - 1, n = 0;
+  while (days[dayKey(t)] && days[dayKey(t)].done) { n++; t--; }
+  return n;
+}
+
+/* ---------- session ---------- */
+let S = null, flipped = false, busy = false;
+function startDaily(extra = 0) {
+  const T = dayNum(), m = Store.meta;
+  if (!m.nt || m.nt.d !== T) { m.nt = { d: T, ids: pickNew(m.daily) }; Store.touchMeta(); }
+  if (extra) { m.nt.ids = m.nt.ids.concat(pickNew(extra, new Set(m.nt.ids))); Store.touchMeta(); }
+  const ntSet = new Set(m.nt.ids);
+  const reviews = WORDS.filter(e => { const st = Store.prog[e.id]; return st && st[1] <= T && !ntSet.has(e.id); }).map(e => e.id);
+  const fresh = m.nt.ids.filter(id => !Store.prog[id] || Store.prog[id][1] <= T);
+  const q = shuffle(reviews).concat(fresh);
+  if (!q.length) { renderHome(); return; }
+  startSession('daily', q, '오늘의 카드', ntSet);
+}
+function startPractice(ids, label) {
+  if (!ids.length) return;
+  startSession('practice', ids, label, new Set());
+}
+function startSession(kind, ids, label, newIds) {
+  S = { kind, label, queue: ids.slice(), cur: null, total: ids.length, newIds, seen: new Set(), failed: new Set(), doneSet: new Set(), firstOk: 0, firstN: 0, hist: [] };
+  show('study');
+  next();
+}
+function next() {
+  if (!S.queue.length) { finish(); return; }
+  S.cur = S.queue.shift();
+  renderCard();
+}
+function answer(known) {
+  if (!S || !S.cur || busy) return;
+  const id = S.cur, T = dayNum();
+  const ds = S.kind === 'daily' ? dayStats(T) : null;
+  S.hist.push({ id, prev: Store.prog[id] ? Store.prog[id].slice() : null, queue: S.queue.slice(), seen: S.seen.has(id), failed: S.failed.has(id), firstOk: S.firstOk, firstN: S.firstN, ds: ds ? JSON.parse(JSON.stringify(ds)) : null });
+  if (S.hist.length > 40) S.hist.shift();
+  const first = !S.seen.has(id);
+  S.seen.add(id);
+  if (first) { S.firstN++; if (known) S.firstOk++; }
+  if (S.kind === 'daily') {
+    const st = Store.prog[id];
+    let [box, due, reps, lapses] = st || [0, T, 0, 0];
+    if (known) {
+      if (S.failed.has(id)) box = 1;            // relearned after a miss
+      else if (!st) box = 2;                    // new word known at first sight
+      else box = Math.min(box + 1, MAXBOX);     // passed a review
+      due = T + INTERVAL[box]; reps++;
+    } else {
+      if (st && first && !S.newIds.has(id)) lapses++;
+      box = 1; due = T;                         // stays due until relearned
+    }
+    Store.setWord(id, [box, due, reps, lapses, T]);
+    if (first) { ds.t++; if (known) ds.ok++; if (S.newIds.has(id)) ds.n++; else ds.r++; }
+    if (!known && !ds.miss.includes(id)) ds.miss.push(id);
+    Store.touchMeta();
+  }
+  if (known) S.doneSet.add(id);
+  else { S.failed.add(id); S.queue.splice(Math.min(3, S.queue.length), 0, id); }
+  S.cur = null;
+  flyOut(known, next);
+}
+function undo() {
+  if (!S || !S.hist.length || busy) return;
+  const h = S.hist.pop();
+  S.queue = h.queue; S.cur = h.id;
+  if (!h.seen) S.seen.delete(h.id);
+  if (!h.failed) S.failed.delete(h.id);
+  S.doneSet.delete(h.id);
+  S.firstOk = h.firstOk; S.firstN = h.firstN;
+  if (S.kind === 'daily') {
+    Store.setWord(h.id, h.prev);
+    if (h.ds) Store.meta.days[dayKey(dayNum())] = h.ds;
+    Store.touchMeta();
+  }
+  resetDrag();
+  renderCard();
+}
+function finish() {
+  if (S.kind === 'daily') {
+    const p = todayPlan();
+    if (!p.rev && !p.newLeft) { dayStats(p.T).done = true; Store.touchMeta(); }
+  }
+  Store.flush();
+  renderDone();
+  show('done');
+}
+function quit() { Store.flush(); S = null; show('home'); }
+
+/* ---------- card rendering & gestures ---------- */
+const cardEl = $('card'), frontEl = $('front'), backEl = $('back'), dragEl = $('drag'), stampK = $('stampK'), stampD = $('stampD');
+function sensesHTML(e) {
+  const multi = e.s.length > 1;
+  return '<ol class="senses">' + e.s.map((s, i) =>
+    '<li>' + (multi ? '<span class="no">' + (i + 1) + '</span>' : '') + '<div>' +
+    (s[1] ? '<p class="ko">' + esc(s[1]) + '</p>' : '') +
+    (s[0] ? '<p class="en" lang="en"><span class="syn">syn</span>' + esc(s[0]) + '</p>' : '') +
+    '</div></li>').join('') + '</ol>';
+}
+function extrasHTML(e) {
+  return (e.note ? '<p class="note"><b>헷갈리는 단어</b>' + esc(e.note) + '</p>' : '') +
+         (e.fix ? '<p class="fixnote">※ ' + esc(e.fix) + '</p>' : '');
+}
+function renderCard() {
+  const e = BY_ID.get(S.cur), enFront = Store.meta.front !== 'ko';
+  flipped = false;
+  cardEl.style.transition = 'none';
+  cardEl.classList.remove('flipped');
+  void cardEl.offsetWidth;
+  cardEl.style.transition = '';
+  const idx = '<div class="idx"><span class="hole"></span><span>DAY ' + pad2(e.d) + '</span><span>·</span><span>No. ' + e.n + '</span></div>';
+  const spk = hasTTS ? '<button class="speak" type="button" data-say="' + esc(e.w) + '" aria-label="발음 듣기">' + ICON.speaker + '</button>' : '';
+  if (enFront) {
+    frontEl.innerHTML = idx + spk + '<div class="hw' + (e.w.length > 13 ? ' long' : '') + '" lang="en">' + esc(e.w) + '</div><p class="hint">탭하거나 Space로 뜻 보기</p>';
+  } else {
+    const multi = e.s.length > 1;
+    frontEl.innerHTML = idx + '<div class="kf">' + e.s.map((s, i) => '<p>' + (multi ? '<small>' + (i + 1) + '</small>' : '') + esc(s[1] || s[0]) + '</p>').join('') + '</div><p class="hint">탭하거나 Space로 단어 보기</p>';
+  }
+  backEl.innerHTML = idx + spk + '<div class="bk"><div class="bk-word" lang="en">' + esc(e.w) + '</div>' + sensesHTML(e) + extrasHTML(e) + '</div>';
+  backEl.scrollTop = 0;
+  const tag = $('stTag');
+  if (S.kind === 'practice') { tag.className = 'tag prac'; tag.textContent = S.label; }
+  else if (S.failed.has(e.id)) { tag.className = 'tag again'; tag.textContent = '다시 보기'; }
+  else if (S.newIds.has(e.id)) { tag.className = 'tag'; tag.textContent = '새 단어'; }
+  else { tag.className = 'tag rev'; tag.textContent = '복습'; }
+  const pending = [...S.failed].filter(id => !S.doneSet.has(id)).length;
+  $('stLeft').textContent = pending ? '다시 볼 카드 ' + pending + '장' : '남은 카드 ' + (S.total - S.doneSet.size) + '장';
+  const pct = Math.round(S.doneSet.size / S.total * 100);
+  $('progFill').style.width = pct + '%';
+  $('progBar').setAttribute('aria-valuenow', pct);
+  $('stCount').textContent = S.doneSet.size + ' / ' + S.total;
+  $('undoBtn').disabled = !S.hist.length;
+  const left = S.queue.length;
+  $('deck1').hidden = left < 1; $('deck2').hidden = left < 2;
+  if (Store.meta.tts && enFront) say(e.w);
+}
+function flip() {
+  if (!S || !S.cur || busy) return;
+  flipped = !flipped;
+  cardEl.classList.toggle('flipped', flipped);
+  cardEl.setAttribute('aria-label', flipped ? '앞면 보기' : '카드 뒤집기');
+}
+function hideStamps() { stampK.style.opacity = 0; stampD.style.opacity = 0; }
+function resetDrag() { dragEl.style.transition = ''; dragEl.style.transform = ''; dragEl.style.opacity = ''; hideStamps(); busy = false; }
+function flyOut(known, done) {
+  if (reduced()) { resetDrag(); done(); return; }
+  busy = true;
+  const dir = known ? 1 : -1;
+  (known ? stampK : stampD).style.opacity = 1;
+  dragEl.style.transition = 'transform .26s ease-in, opacity .26s ease-in';
+  dragEl.style.transform = 'translateX(' + (dir * 125) + '%) rotate(' + (dir * 14) + 'deg)';
+  dragEl.style.opacity = '0';
+  setTimeout(() => {
+    dragEl.style.transition = 'none';
+    dragEl.style.transform = 'translateY(16px) scale(.965)';
+    hideStamps();
+    done();
+    void dragEl.offsetWidth;
+    dragEl.style.transition = 'transform .26s cubic-bezier(.2,.8,.3,1), opacity .2s';
+    dragEl.style.transform = '';
+    dragEl.style.opacity = '1';
+    busy = false;
+    setTimeout(() => { if (!busy) dragEl.style.transition = ''; }, 280);
+  }, 230);
+}
+let drag = null;
+dragEl.addEventListener('pointerdown', ev => {
+  if (!S || !S.cur || busy || (ev.button && ev.button > 0)) return;
+  if (ev.target.closest('.speak')) return;
+  drag = { x: ev.clientX, y: ev.clientY, id: ev.pointerId, dx: 0, t: performance.now(), moved: false };
+});
+dragEl.addEventListener('pointermove', ev => {
+  if (!drag || ev.pointerId !== drag.id) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  if (!drag.moved) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    if (Math.abs(dy) > Math.abs(dx)) { drag = null; return; }
+    drag.moved = true;
+    try { dragEl.setPointerCapture(ev.pointerId); } catch (e) {}
+  }
+  drag.dx = dx;
+  dragEl.style.transition = 'none';
+  dragEl.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 22) + 'deg)';
+  stampK.style.opacity = Math.max(0, Math.min(1, dx / 90));
+  stampD.style.opacity = Math.max(0, Math.min(1, -dx / 90));
+});
+function endDrag(ev) {
+  if (!drag || ev.pointerId !== drag.id) return;
+  const d = drag; drag = null;
+  if (!d.moved) { if (ev.type === 'pointerup') flip(); return; }
+  const v = Math.abs(d.dx) / Math.max(1, performance.now() - d.t);
+  if (Math.abs(d.dx) > 90 || (Math.abs(d.dx) > 40 && v > 0.55)) answer(d.dx > 0);
+  else { dragEl.style.transition = 'transform .2s'; dragEl.style.transform = ''; hideStamps(); }
+}
+dragEl.addEventListener('pointerup', endDrag);
+dragEl.addEventListener('pointercancel', endDrag);
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-say]');
+  if (b) { ev.stopPropagation(); say(b.dataset.say); }
+});
+$('knowBtn').addEventListener('click', ev => { ev.currentTarget.blur(); answer(true); });
+$('dontBtn').addEventListener('click', ev => { ev.currentTarget.blur(); answer(false); });
+$('undoBtn').addEventListener('click', ev => { ev.currentTarget.blur(); undo(); });
+$('quitBtn').addEventListener('click', quit);
+document.addEventListener('keydown', ev => {
+  if (view !== 'study' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if (ev.target.closest && ev.target.closest('input,select,textarea')) return;
+  const k = ev.key;
+  if (k === ' ' || k === 'Enter') { ev.preventDefault(); flip(); }
+  else if (k === 'ArrowLeft' || k === '1') { ev.preventDefault(); answer(false); }
+  else if (k === 'ArrowRight' || k === '2') { ev.preventDefault(); answer(true); }
+  else if (k === 's' || k === 'S') { if (S && S.cur) say(BY_ID.get(S.cur).w); }
+  else if (k === 'z' || k === 'Z' || k === 'Backspace') { ev.preventDefault(); undo(); }
+  else if (k === 'Escape') quit();
+});
+
+/* ---------- views ---------- */
+let view = 'home';
+function show(v) {
+  view = v;
+  for (const id of ['setup', 'home', 'study', 'done', 'words', 'settings']) $('v-' + id).hidden = id !== v;
+  $('top').hidden = v === 'study' || v === 'setup';
+  for (const [b, t] of [['navHome', 'home'], ['navWords', 'words'], ['navSettings', 'settings']]) {
+    if (t === v) $(b).setAttribute('aria-current', 'page'); else $(b).removeAttribute('aria-current');
+  }
+  if (v !== 'study') resetDrag();
+  window.scrollTo(0, 0);
+  if (v === 'home') renderHome();
+  else if (v === 'words') renderWords();
+  else if (v === 'settings') renderSettings();
+  else if (v === 'study') cardEl.focus({ preventScroll: true });
+  else if (v === 'setup') renderSetup();
+}
+const dateFmt = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', month: 'long', day: 'numeric', weekday: 'long' });
+function rangeLabel(ids) {
+  if (!ids.length) return '';
+  const a = BY_ID.get(ids[0]), b = BY_ID.get(ids[ids.length - 1]);
+  const head = '<b lang="en">' + esc(a.w) + '</b>' + (ids.length > 1 ? ' 외 ' + (ids.length - 1) + '개' : '');
+  const where = a.d === b.d ? 'Day ' + pad2(a.d) + ' · ' + a.n + (ids.length > 1 ? '–' + b.n : '') + '번' : 'Day ' + pad2(a.d) + ' ' + a.n + '번 – Day ' + pad2(b.d) + ' ' + b.n + '번';
+  return '새 단어 ' + head + ' <span class="mono" style="font-size:12px">(' + where + ')</span>';
+}
+function renderHome() {
+  const p = todayPlan(), loading = Store.mode === 'loading';
+  $('installHint').hidden = standalone || !isIOS;
+  $('homeDate').textContent = dateFmt.format(new Date(p.T * DAYMS));
+  $('nRev').textContent = loading ? '–' : p.rev;
+  $('nNew').textContent = loading ? '–' : p.newLeft;
+  const left = p.rev + p.newLeft, ds = Store.meta.days[dayKey(p.T)];
+  const startBtn = $('startBtn');
+  startBtn.disabled = loading;
+  startBtn.textContent = loading ? '기록 불러오는 중…' : (ds && ds.t ? '이어서 학습' : '학습 시작');
+  startBtn.hidden = !loading && left === 0;
+  $('todayDone').hidden = loading || left > 0;
+  const pending = p.planned.filter(id => !Store.prog[id] || Store.prog[id][1] <= p.T);
+  $('todaySub').innerHTML = loading ? '' : pending.length ? rangeLabel(pending) : (p.rev ? '오늘은 복습 카드만 남았어요' : '');
+  $('todaySub').hidden = loading || !$('todaySub').innerHTML;
+  $('moreBtn').textContent = '새 단어 ' + Store.meta.daily + '개 더';
+  const miss = ds && ds.miss ? ds.miss.filter(id => BY_ID.has(id)) : [];
+  $('missBtn').hidden = !miss.length;
+  $('missBtn').textContent = '오늘 틀린 단어 ' + miss.length + '개 연습';
+  // week strip
+  const labels = ['일', '월', '화', '수', '목', '금', '토'];
+  let wk = '';
+  for (let t = p.T - 6; t <= p.T; t++) {
+    const d = Store.meta.days[dayKey(t)], cls = d && d.done ? 'done' : d && d.t ? 'part' : '';
+    wk += '<div class="wk ' + cls + (t === p.T ? ' is-today' : '') + '" title="' + dayKey(t) + '"><i>' + ICON.check + '</i><span>' + labels[new Date(t * DAYMS).getUTCDay()] + '</span></div>';
+  }
+  $('week').innerHTML = wk;
+  const all = Object.values(Store.prog);
+  $('sStreak').textContent = streak();
+  $('sSeen').textContent = fmt(all.length);
+  $('sMaster').textContent = fmt(all.filter(st => st[0] >= MASTER).length);
+  $('totalWords').textContent = '총 ' + fmt(WORDS.length) + '단어 · Day ' + DAYS.length + '개';
+  $('dayGrid').innerHTML = DAYS.map(d => {
+    const ws = DAY_WORDS.get(d);
+    let m = 0, l = 0;
+    for (const e of ws) { const st = Store.prog[e.id]; if (st) { if (st[0] >= MASTER) m++; else l++; } }
+    const full = m === ws.length;
+    return '<button class="dt" type="button" data-day="' + d + '" aria-label="Day ' + d + ', ' + ws.length + '단어 중 학습 ' + (m + l) + '개"><b>' + pad2(d) + (full ? ICON.check : '') + '</b><span class="mb"><i class="m" style="width:' + (m / ws.length * 100) + '%"></i><i class="l" style="width:' + (l / ws.length * 100) + '%"></i></span></button>';
+  }).join('');
+  setSave(Store.state);
+}
+function renderDone() {
+  const daily = S.kind === 'daily';
+  const nNew = [...S.doneSet].filter(id => S.newIds.has(id)).length;
+  $('doneEyebrow').textContent = daily ? '오늘의 카드' : S.label;
+  $('doneTitle').textContent = daily ? '오늘 학습 완료' : '연습 완료';
+  $('dA').textContent = daily ? nNew : S.doneSet.size;
+  $('dAl').textContent = daily ? '새 단어' : '카드';
+  $('dB').textContent = daily ? S.doneSet.size - nNew : S.failed.size;
+  $('dBl').textContent = daily ? '복습' : '다시 본 카드';
+  $('dC').textContent = (S.firstN ? Math.round(S.firstOk / S.firstN * 100) : 0) + '%';
+  if (daily) {
+    const T = dayNum(), n = streak();
+    let tomorrow = 0;
+    for (const st of Object.values(Store.prog)) if (st[1] <= T + 1) tomorrow++;
+    $('doneNote').textContent = (n ? n + '일 연속 학습 중 · ' : '') + '내일 복습할 카드 ' + tomorrow + '장';
+  } else {
+    $('doneNote').textContent = '연습은 복습 일정에 반영되지 않아요';
+  }
+  const missed = [...S.failed];
+  $('missWrap').hidden = !missed.length;
+  $('missN').textContent = missed.length + '개';
+  $('missList').innerHTML = missed.map(id => rowHTML(BY_ID.get(id), true)).join('');
+  $('donePractice').hidden = !missed.length;
+  $('doneMore').textContent = '새 단어 ' + Store.meta.daily + '개 더';
+  $('doneMore').hidden = !daily;
+}
+function statusOf(e) {
+  const st = Store.prog[e.id];
+  return !st ? ['p-new', '새 단어'] : st[0] >= MASTER ? ['p-master', '암기 완료'] : ['p-learn', '학습 중'];
+}
+function rowHTML(e, showDay) {
+  const [cls, label] = statusOf(e), multi = e.s.length > 1;
+  const senses = e.s.map((s, i) => (s[1] ? '<span class="k">' + (multi ? CIRC[i] + ' ' : '') + esc(s[1]) + '</span>' : '') +
+    (s[0] ? '<span class="e" lang="en">' + (multi && !s[1] ? CIRC[i] + ' ' : '') + esc(s[0]) + '</span>' : '')).join('');
+  return '<li class="wrow"><span class="no">' + (showDay ? '<span class="dayno">D' + pad2(e.d) + '</span><br>' : '') + e.n + '</span>' +
+    '<span class="w" lang="en">' + esc(e.w) + (hasTTS ? '<button class="say" type="button" data-say="' + esc(e.w) + '" aria-label="' + esc(e.w) + ' 발음 듣기">' + ICON.speaker + '</button>' : '') + '</span>' +
+    '<span class="pill ' + cls + '">' + label + '</span>' + senses +
+    (e.note ? '<span class="x">헷갈리는 단어 · ' + esc(e.note) + '</span>' : '') +
+    (e.fix ? '<span class="x">※ ' + esc(e.fix) + '</span>' : '') + '</li>';
+}
+let wDay = 1, wQ = '';
+function renderWords() {
+  $('dayChips').innerHTML = DAYS.map(d => '<button class="chip" type="button" data-wday="' + d + '" aria-pressed="' + (!wQ && d === wDay) + '">' + pad2(d) + '</button>').join('');
+  let list;
+  if (wQ) {
+    const q = wQ.toLowerCase();
+    list = WORDS.filter(e => e.w.toLowerCase().includes(q) || e.s.some(s => s[0].toLowerCase().includes(q) || s[1].includes(wQ)));
+    $('wInfo').textContent = '“' + wQ + '” 검색 결과 ' + list.length + '개';
+  } else {
+    list = DAY_WORDS.get(wDay);
+    let seen = 0, m = 0;
+    for (const e of list) { const st = Store.prog[e.id]; if (st) { seen++; if (st[0] >= MASTER) m++; } }
+    $('wInfo').textContent = 'Day ' + pad2(wDay) + ' · ' + list.length + '단어 · 학습 ' + seen + ' · 암기 완료 ' + m;
+  }
+  $('practiceDay').hidden = !!wQ;
+  const shown = list.slice(0, 300);
+  $('wordList').innerHTML = shown.length ? shown.map(e => rowHTML(e, !!wQ)).join('') : '<li class="empty">찾는 단어가 없어요</li>';
+  const chip = $('dayChips').querySelector('[aria-pressed="true"]');
+  if (chip) chip.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+function renderSettings() {
+  const m = Store.meta;
+  $('segDaily').innerHTML = DAILY_OPTS.map(n => '<button type="button" data-v="' + n + '" aria-pressed="' + (m.daily === n) + '">' + n + '</button>').join('');
+  for (const b of $('segFront').children) b.setAttribute('aria-pressed', String(b.dataset.v === (m.front || 'en')));
+  $('ttsAuto').checked = !!m.tts;
+  $('ttsAuto').disabled = !hasTTS;
+  $('startDay').innerHTML = DAYS.map(d => '<option value="' + d + '"' + (d === (m.start || 1) ? ' selected' : '') + '>Day ' + pad2(d) + '부터</option>').join('');
+  $('storeInfo').textContent = Store.mode === 'cloud' ? 'claude.ai 계정에 저장돼요. 폰이나 PC 어디서 열어도 이어서 학습할 수 있어요.'
+    : Store.mode === 'local' ? '이 폰 안에만 저장돼요. 홈 화면에서 앱을 지우면 기록도 지워지니, 가끔 아래에서 백업해 두세요.' : '불러오는 중…';
+  $('resetConfirm').hidden = true;
+  $('about').innerHTML = '<b>단어 데이터</b> · 캡처한 TOEFL 초록 단어책 목록 Day 01–' + pad2(DAYS[DAYS.length - 1]) + ', ' + fmt(WORDS.length) + '단어. OCR 결과를 원본 이미지와 한 줄씩 대조해 정리했어요. 원문 오타를 고쳤거나 확인이 필요한 단어에는 ※ 메모가 붙어 있어요.<br><b>복습 간격</b> · 알아요를 누를 때마다 1 → 2 → 4 → 8 → 16 → 32 → 64일로 늘어나고, 몰라요를 누르면 그 자리에서 다시 나온 뒤 내일 다시 복습해요. 16일 간격에 도달하면 ‘암기 완료’로 셉니다. 하루는 새벽 4시에 바뀌어요.';
+}
+function refreshTodayNew() {
+  const m = Store.meta, T = dayNum();
+  if (!m.nt || m.nt.d !== T) return;
+  const answered = m.nt.ids.filter(id => Store.prog[id]);
+  m.nt.ids = answered.concat(pickNew(Math.max(0, m.daily - answered.length), new Set(answered)));
+}
+
+/* ---------- wiring ---------- */
+$('brandBtn').addEventListener('click', () => show('home'));
+$('navHome').addEventListener('click', () => show('home'));
+$('navWords').addEventListener('click', () => show('words'));
+$('navSettings').addEventListener('click', () => show('settings'));
+$('startBtn').addEventListener('click', () => startDaily());
+$('moreBtn').addEventListener('click', () => startDaily(Store.meta.daily));
+$('missBtn').addEventListener('click', () => {
+  const ds = Store.meta.days[dayKey(dayNum())];
+  startPractice(shuffle((ds && ds.miss || []).filter(id => BY_ID.has(id))), '틀린 단어 연습');
+});
+$('doneMore').addEventListener('click', () => startDaily(Store.meta.daily));
+$('donePractice').addEventListener('click', () => startPractice(shuffle([...S.failed]), '다시 본 단어 연습'));
+$('doneHome').addEventListener('click', () => { S = null; show('home'); });
+$('dayGrid').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-day]');
+  if (b) { wDay = Number(b.dataset.day); wQ = ''; $('q').value = ''; show('words'); }
+});
+$('dayChips').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-wday]');
+  if (b) { wDay = Number(b.dataset.wday); wQ = ''; $('q').value = ''; renderWords(); }
+});
+let qTimer = 0;
+$('q').addEventListener('input', ev => { clearTimeout(qTimer); qTimer = setTimeout(() => { wQ = ev.target.value.trim(); renderWords(); }, 120); });
+$('practiceDay').addEventListener('click', () => startPractice(DAY_WORDS.get(wDay).map(e => e.id), 'Day ' + pad2(wDay) + ' 연습'));
+$('segDaily').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-v]');
+  if (!b) return;
+  Store.meta.daily = Number(b.dataset.v); refreshTodayNew(); Store.touchMeta(); renderSettings();
+});
+$('segFront').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-v]');
+  if (!b) return;
+  Store.meta.front = b.dataset.v; Store.touchMeta(); renderSettings();
+});
+$('ttsAuto').addEventListener('change', ev => { Store.meta.tts = ev.target.checked; Store.touchMeta(); });
+$('startDay').addEventListener('change', ev => { Store.meta.start = Number(ev.target.value); refreshTodayNew(); Store.touchMeta(); });
+$('resetBtn').addEventListener('click', () => { $('resetConfirm').hidden = false; });
+$('resetNo').addEventListener('click', () => { $('resetConfirm').hidden = true; });
+$('resetYes').addEventListener('click', () => {
+  for (const id of Object.keys(Store.prog)) Store.dirtyW[id] = null;
+  Store.prog = {};
+  Object.assign(Store.meta, { nt: null, days: {} });
+  Store.touchMeta();
+  Store.flush();
+  show('home');
+});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') Store.flush(); });
+window.addEventListener('pagehide', () => Store.flush());
+
+/* ---------- phone app: word file, backup, offline ---------- */
+const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let toastTimer = 0;
+function toast(text) {
+  const el = $('toast');
+  el.textContent = text; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
+}
+function readFile(input) {
+  return new Promise((resolve, reject) => {
+    const f = input.files && input.files[0];
+    if (!f) return reject(new Error('파일이 선택되지 않았어요'));
+    const r = new FileReader();
+    r.onload = () => { try { resolve(JSON.parse(r.result)); } catch (e) { reject(new Error('JSON 파일이 아니에요')); } };
+    r.onerror = () => reject(new Error('파일을 읽지 못했어요'));
+    r.readAsText(f);
+  });
+}
+function renderSetup() {
+  const has = WORDS.length > 0;
+  $('setupCancel').hidden = !has;
+  $('setupInstall').hidden = standalone || !isIOS || has;
+  $('setupMsg').hidden = true;
+}
+$('dataFile').addEventListener('change', async ev => {
+  const msg = $('setupMsg');
+  try {
+    const o = await readFile(ev.target);
+    const rows = o && o.app === 'chorok-voca' && validRows(o.words) ? o.words : null;
+    if (!rows) throw new Error('초록 보카 단어 파일이 아니에요. chorok-voca-data.json을 골라주세요.');
+    localStorage.setItem(WORDS_KEY, JSON.stringify({ v: o.v || 1, words: rows }));
+    initData(rows);
+    Store.prog = cleanProg(Store.prog);
+    Store.saveLocal();
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+    toast(fmt(rows.length) + '단어를 불러왔어요');
+    show('home');
+  } catch (e) {
+    msg.hidden = false; msg.className = 'msg err'; msg.textContent = e.message;
+  } finally { ev.target.value = ''; }
+});
+$('setupCancel').addEventListener('click', () => show('settings'));
+$('reimportBtn').addEventListener('click', () => show('setup'));
+$('backupBtn').addEventListener('click', async () => {
+  const json = JSON.stringify({ app: 'chorok-voca-backup', v: 1, at: new Date().toISOString(), prog: Store.prog, meta: Store.meta });
+  const name = 'chorok-voca-backup-' + dayKey(dayNum()) + '.json';
+  try {
+    const file = new File([json], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: '초록 보카 백업' });
+      toast('백업 파일을 만들었어요');
+      return;
+    }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  toast('백업 파일을 만들었어요');
+});
+$('restoreFile').addEventListener('change', async ev => {
+  try {
+    const o = await readFile(ev.target);
+    if (!o || o.app !== 'chorok-voca-backup' || typeof o.prog !== 'object') throw new Error('초록 보카 백업 파일이 아니에요');
+    Store.prog = cleanProg(o.prog);
+    Store.meta = Object.assign(newMeta(), o.meta || {});
+    Store.saveLocal();
+    toast('기록을 되돌렸어요 (' + fmt(Object.keys(Store.prog).length) + '단어)');
+    show('home');
+  } catch (e) { toast(e.message); } finally { ev.target.value = ''; }
+});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); });
+}
+
+/* ---------- boot ---------- */
+Store.mode = 'local';
+const saved = loadWords();
+if (saved) initData(saved);
+Store.loadLocal();
+setSave('ok');
+show(saved ? 'home' : 'setup');
+})();
+</script>
+</body>
+</html>

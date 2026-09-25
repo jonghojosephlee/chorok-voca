@@ -16,8 +16,8 @@ self.addEventListener('activate', event => {
   );
 });
 
-function fresh(request, cacheName, key) {   // network first, cached copy when offline or slow
-  const network = fetch(request).then(res => {
+function fresh(request, cacheName, key) {   // network first (revalidating the HTTP cache), cached copy when offline or slow
+  const network = fetch(new Request(request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(res => {
     if (res.ok) { const copy = res.clone(); caches.open(cacheName).then(c => c.put(key || request, copy)); }
     return res;
   });

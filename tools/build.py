@@ -116,8 +116,8 @@ def build_artifact():
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(os.path.join(out, 'audio'))
     for d, b in packs.items():
-        open(os.path.join(out, 'audio', f'd{d:02d}.bin'), 'wb').write(b)
-    cfg = {'mode': 'artifact', 'version': VERSION, 'audio': {'base': 'audio/', 'enc': False, 'days': days}}
+        open(os.path.join(out, 'audio', f'd{d:02d}.txt'), 'w').write(base64.b64encode(b).decode())
+    cfg = {'mode': 'artifact', 'version': VERSION, 'audio': {'base': 'audio/', 'enc': False, 'b64': True, 'ext': '.txt', 'days': days}}
     words_js = 'window.__CV_WORDS__ = ' + json.dumps(rows, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/') + ';'
     html = page('<title>초록 보카</title>', '', '', cfg, words_js, ARTIFACT_CSS)
     open(os.path.join(out, 'chorok-voca.html'), 'w').write(html)

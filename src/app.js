@@ -288,13 +288,20 @@ function tts(text, lang) {
 const Voice = {
   packs: new Map(), bufs: new Map(), order: [], cur: null, failed: false,
   available() { return !!(CFG.audio && (!CFG.audio.enc || localStorage.getItem(K_KEY))) && !this.failed; },
-  url(d) { return CFG.audio.base + 'd' + pad2(d) + '.bin'; },
+  url(d) { return CFG.audio.base + 'd' + pad2(d) + (CFG.audio.ext || '.bin'); },
   pack(d) {
     if (!this.packs.has(d)) {
       this.packs.set(d, (async () => {
-        const res = await fetch(this.url(d));
+        let res = null;
+        if (PWA && 'caches' in window) { try { res = await caches.match(new URL(this.url(d), location.href).href); } catch (e) { res = null; } }
+        if (!res) res = await fetch(this.url(d));
         if (!res.ok) throw new Error('audio ' + res.status);
-        let buf = await res.arrayBuffer();
+        let buf;
+        if (CFG.audio.b64) {   // claude.ai serves the packs as base64 text
+          const bin = atob((await res.text()).trim()), u = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+          buf = u.buffer;
+        } else buf = await res.arrayBuffer();
         if (CFG.audio.enc) buf = await Crypto.open(await Crypto.stored(), buf);
         const dv = new DataView(buf);
         if (dv.getUint32(0, true) !== 0x31415643) throw new Error('bad pack');
@@ -1172,7 +1179,14 @@ async function unlock() {
     let done = 0;
     unlockMsg(`발음 받는 중… 0/${days.length}`); unlockProg(0.1);
     const queue = days.slice();
-    const worker = async () => { while (queue.length) { const d = queue.shift(); try { const r = await fetch(CFG.audio.base + 'd' + pad2(d) + '.bin'); await r.arrayBuffer(); } catch (e) {} done++; unlockMsg(`발음 받는 중… ${done}/${days.length}`); unlockProg(0.1 + 0.9 * done / days.length); } };
+    const store = 'caches' in window ? await caches.open('cv-data').catch(() => null) : null;   // the service worker may not control the page yet on the first launch
+    const worker = async () => {
+      while (queue.length) {
+        const d = queue.shift(), url = new URL(CFG.audio.base + 'd' + pad2(d) + '.bin', location.href).href;
+        try { if (store) { if (!(await store.match(url))) await store.add(url); } else await (await fetch(url)).arrayBuffer(); } catch (e) {}
+        done++; unlockMsg(`발음 받는 중… ${done}/${days.length}`); unlockProg(0.1 + 0.9 * done / days.length);
+      }
+    };
     await Promise.all([worker(), worker(), worker(), worker()]);
     try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
     unlockMsg(`${fmt(data.words.length)}단어 준비 완료!`);

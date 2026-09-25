@@ -1,4 +1,4 @@
-const VERSION = '2.0.2-1cdeab12ea';
+const VERSION = '2.0.3-202ebe72b1';
 const SHELL = 'cv-shell-' + VERSION;
 const DATA = 'cv-data';
 const FONTS = 'cv-fonts';
@@ -16,8 +16,8 @@ self.addEventListener('activate', event => {
   );
 });
 
-function fresh(request, cacheName, key) {   // network first, cached copy when offline or slow
-  const network = fetch(request).then(res => {
+function fresh(request, cacheName, key) {   // network first (revalidating the HTTP cache), cached copy when offline or slow
+  const network = fetch(new Request(request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(res => {
     if (res.ok) { const copy = res.clone(); caches.open(cacheName).then(c => c.put(key || request, copy)); }
     return res;
   });

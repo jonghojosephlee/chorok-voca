@@ -1,4 +1,5 @@
-const VERSION = '2.0.3-202ebe72b1';
+const VERSION = '2.0.4-aa8f38f264';
+const AUDIO_V = '5c2459ab44';
 const SHELL = 'cv-shell-' + VERSION;
 const DATA = 'cv-data';
 const FONTS = 'cv-fonts';
@@ -12,6 +13,8 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => (k.startsWith('cv-shell-') && k !== SHELL) || k.startsWith('shell-') || k === 'fonts').map(k => caches.delete(k))))
+      .then(() => caches.open(DATA))
+      .then(c => c.keys().then(reqs => Promise.all(reqs.filter(r => r.url.includes('/data/audio/') && !r.url.endsWith('v=' + AUDIO_V)).map(r => c.delete(r)))))
       .then(() => self.clients.claim())
   );
 });

@@ -40,6 +40,7 @@ def pack_day(d):
         off += len(b)
     return b'CVA1' + struct.pack('<H', len(entries)) + b''.join(index) + b''.join(blobs)
 packs = {d: pack_day(d) for d in days}
+AUDIO_V = hashlib.sha256(b''.join(packs[d] for d in days)).hexdigest()[:10]   # changes only when the clips change
 
 # ---- secret (stable across rebuilds) ----
 sec_path = os.path.join(HERE, 'secret.json')
@@ -92,17 +93,17 @@ def build_pwa():
     shutil.copytree(os.path.join(S, 'pwa', 'icons'), os.path.join(out, 'icons'))
     for f in ('manifest.json', 'README.md', '.nojekyll'):
         shutil.copy(os.path.join(S, 'pwa', f), os.path.join(out, f))
-    words_bin = seal(json.dumps({'v': 2, 'words': rows}, ensure_ascii=False, separators=(',', ':')).encode())
+    rev = hashlib.sha256(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()[:12]
+    words_bin = seal(json.dumps({'v': 2, 'rev': rev, 'words': rows}, ensure_ascii=False, separators=(',', ':')).encode())
     open(os.path.join(out, 'data', 'words.bin'), 'wb').write(words_bin)
     for d, b in packs.items():
         open(os.path.join(out, 'data', 'audio', f'd{d:02d}.bin'), 'wb').write(seal(b))
-    rev = hashlib.sha256(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()[:12]
     cfg = {'mode': 'pwa', 'version': VERSION, 'crypto': {'salt': sec['salt'], 'iter': ITER}, 'data': {'words': 'data/words.bin', 'rev': rev},
-           'audio': {'base': 'data/audio/', 'enc': True, 'days': days}}
+           'audio': {'base': 'data/audio/', 'enc': True, 'v': AUDIO_V, 'days': days}}
     html = page(PWA_HEAD, '</head>\n<body>', '</body>\n</html>\n', cfg, '')
     open(os.path.join(out, 'index.html'), 'w').write(html)
     digest = hashlib.sha256(html.encode() + words_bin).hexdigest()[:10]
-    sw = open(os.path.join(SRC, 'sw.js')).read().replace('__VERSION__', VERSION + '-' + digest)
+    sw = open(os.path.join(SRC, 'sw.js')).read().replace('__VERSION__', VERSION + '-' + digest).replace('__AUDIO_V__', AUDIO_V)
     open(os.path.join(out, 'sw.js'), 'w').write(sw)
     return out
 

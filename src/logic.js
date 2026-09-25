@@ -181,7 +181,12 @@ const Logic = (() => {
     const k = dayKey(T);
     return state.days[k] || (state.days[k] = { xp: 0, n: 0, r: 0, ok: 0, t: 0, done: false, miss: [] });
   }
-  function dayMet(state, k) { const d = state.days[k]; return !!d && (d.done || d.xp >= state.settings.goal); }
+  function dayMet(state, k) { const d = state.days[k]; return !!d && !!(d.done || d.met); }
+  function addXp(state, ds, xp) {
+    ds.xp += xp;
+    state.xpTotal = (state.xpTotal || 0) + xp;
+    if (ds.xp >= state.settings.goal) ds.met = true;
+  }
   function streak(state, T) {
     let t = dayMet(state, dayKey(T)) ? T : T - 1, n = 0;
     while (dayMet(state, dayKey(t))) { n++; t--; }
@@ -297,19 +302,18 @@ const Logic = (() => {
     }
     state.prog[id] = [box, due, reps, lapses, T];
     const ds = dayStats(state, T);
-    ds.xp += res.xp;
+    addXp(state, ds, res.xp);
     if (first) { ds.t++; if (correct) ds.ok++; }
     if (correct) { if (isNew) ds.n++; else ds.r++; }
     if (!correct && !ds.miss.includes(id)) ds.miss.push(id);
     L.stat.xp += res.xp;
-    state.xpTotal = (state.xpTotal || 0) + res.xp;
     res.combo = L.stat.combo;
     L.i++;
     return res;
   }
   function finishLesson(state, W, L) {
     const T = L.T, ds = dayStats(state, T), bonus = 10;
-    ds.xp += bonus; L.stat.xp += bonus; state.xpTotal = (state.xpTotal || 0) + bonus;
+    addXp(state, ds, bonus); L.stat.xp += bonus;
     ds.lessons = (ds.lessons || 0) + 1;
     const plan = todayPlan(state, W, T);
     if (!plan.rev && !plan.newLeft) ds.done = true;
@@ -351,14 +355,14 @@ const Logic = (() => {
       if (p) state.prog[st.id] = [1, X.T + 1, p[2], p[3] + 1, X.T];
       if (!ds.miss.includes(st.id)) ds.miss.push(st.id);
     }
-    X.stat.xp += res.xp; ds.xp += res.xp; state.xpTotal = (state.xpTotal || 0) + res.xp;
+    X.stat.xp += res.xp; addXp(state, ds, res.xp);
     res.combo = X.stat.combo;
     X.i++;
     return res;
   }
   function finishTest(state, X) {
     const bonus = X.stat.n ? 5 : 0, ds = dayStats(state, X.T);
-    X.stat.xp += bonus; ds.xp += bonus; state.xpTotal = (state.xpTotal || 0) + bonus;
+    X.stat.xp += bonus; addXp(state, ds, bonus);
     ds.tests = (ds.tests || 0) + 1;
     const wrongIds = X.answers.filter(a => !a[1]).map(a => a[0]);
     state.tests.unshift({ at: Date.now(), T: X.T, label: X.spec.label || '', qt: X.spec.qt, n: X.stat.n, ok: X.stat.ok, ms: X.stat.ms, wrong: wrongIds });
@@ -371,7 +375,7 @@ const Logic = (() => {
   return {
     INTERVAL, MAXBOX, MASTER, MIX_TYPES, REVIEW_CAP, dayNum, dayKey, seed, shuffle, pick,
     stems, posOf, synonymsOf, prepare, related, makeQuestion, checkSpell, normSpell,
-    defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, streak, touchBest,
+    defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, addXp, streak, touchBest,
     pickNew, ensurePlan, refreshPlan, todayPlan, statusOf,
     buildLesson, lessonUnits, answerLesson, finishLesson,
     rangeIds, buildTest, answerTest, finishTest, clearWrong,

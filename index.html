@@ -466,7 +466,7 @@ select{font-size:16px;padding:8px 12px;border-radius:11px;border:1.5px solid var
 <div class="toast" id="toast" role="status" hidden></div>
 <canvas id="confetti" hidden></canvas>
 <input type="file" id="filePick" class="vh" tabindex="-1" aria-hidden="true">
-<script>window.__CV__ = {"mode": "pwa", "version": "2.0.3", "crypto": {"salt": "5XuliZAP9T9FrI1CC7f7sg==", "iter": 600000}, "data": {"words": "data/words.bin", "rev": "1a89ee1d6703"}, "audio": {"base": "data/audio/", "enc": true, "days": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}};</script>
+<script>window.__CV__ = {"mode": "pwa", "version": "2.0.4", "crypto": {"salt": "5XuliZAP9T9FrI1CC7f7sg==", "iter": 600000}, "data": {"words": "data/words.bin", "rev": "1a89ee1d6703"}, "audio": {"base": "data/audio/", "enc": true, "v": "5c2459ab44", "days": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}};</script>
 <script></script>
 <script>
 /* 초록 보카 core logic: words, spaced repetition, question generation, lessons and tests.
@@ -652,7 +652,12 @@ const Logic = (() => {
     const k = dayKey(T);
     return state.days[k] || (state.days[k] = { xp: 0, n: 0, r: 0, ok: 0, t: 0, done: false, miss: [] });
   }
-  function dayMet(state, k) { const d = state.days[k]; return !!d && (d.done || d.xp >= state.settings.goal); }
+  function dayMet(state, k) { const d = state.days[k]; return !!d && !!(d.done || d.met); }
+  function addXp(state, ds, xp) {
+    ds.xp += xp;
+    state.xpTotal = (state.xpTotal || 0) + xp;
+    if (ds.xp >= state.settings.goal) ds.met = true;
+  }
   function streak(state, T) {
     let t = dayMet(state, dayKey(T)) ? T : T - 1, n = 0;
     while (dayMet(state, dayKey(t))) { n++; t--; }
@@ -768,19 +773,18 @@ const Logic = (() => {
     }
     state.prog[id] = [box, due, reps, lapses, T];
     const ds = dayStats(state, T);
-    ds.xp += res.xp;
+    addXp(state, ds, res.xp);
     if (first) { ds.t++; if (correct) ds.ok++; }
     if (correct) { if (isNew) ds.n++; else ds.r++; }
     if (!correct && !ds.miss.includes(id)) ds.miss.push(id);
     L.stat.xp += res.xp;
-    state.xpTotal = (state.xpTotal || 0) + res.xp;
     res.combo = L.stat.combo;
     L.i++;
     return res;
   }
   function finishLesson(state, W, L) {
     const T = L.T, ds = dayStats(state, T), bonus = 10;
-    ds.xp += bonus; L.stat.xp += bonus; state.xpTotal = (state.xpTotal || 0) + bonus;
+    addXp(state, ds, bonus); L.stat.xp += bonus;
     ds.lessons = (ds.lessons || 0) + 1;
     const plan = todayPlan(state, W, T);
     if (!plan.rev && !plan.newLeft) ds.done = true;
@@ -822,14 +826,14 @@ const Logic = (() => {
       if (p) state.prog[st.id] = [1, X.T + 1, p[2], p[3] + 1, X.T];
       if (!ds.miss.includes(st.id)) ds.miss.push(st.id);
     }
-    X.stat.xp += res.xp; ds.xp += res.xp; state.xpTotal = (state.xpTotal || 0) + res.xp;
+    X.stat.xp += res.xp; addXp(state, ds, res.xp);
     res.combo = X.stat.combo;
     X.i++;
     return res;
   }
   function finishTest(state, X) {
     const bonus = X.stat.n ? 5 : 0, ds = dayStats(state, X.T);
-    X.stat.xp += bonus; ds.xp += bonus; state.xpTotal = (state.xpTotal || 0) + bonus;
+    X.stat.xp += bonus; addXp(state, ds, bonus);
     ds.tests = (ds.tests || 0) + 1;
     const wrongIds = X.answers.filter(a => !a[1]).map(a => a[0]);
     state.tests.unshift({ at: Date.now(), T: X.T, label: X.spec.label || '', qt: X.spec.qt, n: X.stat.n, ok: X.stat.ok, ms: X.stat.ms, wrong: wrongIds });
@@ -842,7 +846,7 @@ const Logic = (() => {
   return {
     INTERVAL, MAXBOX, MASTER, MIX_TYPES, REVIEW_CAP, dayNum, dayKey, seed, shuffle, pick,
     stems, posOf, synonymsOf, prepare, related, makeQuestion, checkSpell, normSpell,
-    defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, streak, touchBest,
+    defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, addXp, streak, touchBest,
     pickNew, ensurePlan, refreshPlan, todayPlan, statusOf,
     buildLesson, lessonUnits, answerLesson, finishLesson,
     rangeIds, buildTest, answerTest, finishTest, clearWrong,
@@ -923,14 +927,12 @@ const ring = (size, stroke, parts, track = 'var(--surface-3)') => {
 
 /* ---------- words data ---------- */
 let W = null;
-const K_WORDS = 'cv2-words', K_KEY = 'cv2-key', K_STATE = 'cv2-state';
+const K_WORDS = 'cv2-words', K_KEY = 'cv2-key', K_STATE = 'cv2-state', K_AT = 'cv2-at';
 function storedRows() {
   if (!PWA) return window.__CV_WORDS__ || null;
   try {
     const o = JSON.parse(localStorage.getItem(K_WORDS) || 'null');
     if (o && Array.isArray(o.words) && o.words.length) return o.words;
-    const v1 = JSON.parse(localStorage.getItem('chorok-voca-words-v1') || 'null');
-    if (v1 && Array.isArray(v1.words) && v1.words.length) return v1.words;
   } catch (e) {}
   return null;
 }
@@ -972,7 +974,8 @@ const Local = {
     } catch (e) {}
     return null;
   },
-  write(s) { try { localStorage.setItem(K_STATE, JSON.stringify(s)); return true; } catch (e) { return false; } },
+  write(s) { try { localStorage.setItem(K_STATE, JSON.stringify(s)); localStorage.setItem(K_AT, String(s.at || 0)); return true; } catch (e) { return false; } },
+  at() { try { return Number(localStorage.getItem(K_AT) || 0); } catch (e) { return 0; } },
 };
 const Cloud = {   // claude.ai build: the viewer's own private documents
   ready: false, refs: null, hasProg: false, pushed: {}, timer: 0, chain: Promise.resolve(), status: '',
@@ -1039,12 +1042,28 @@ function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 250);
 }
+let syncedAt = 0;
 function flush() {
   clearTimeout(saveTimer);
-  Local.write(state);
+  if (!state) return;
+  const other = Local.at();
+  if (other > syncedAt && other > (state.at || 0)) { adoptStored(); return; }   // another tab saved something newer
+  if (Local.write(state)) syncedAt = state.at || 0;
   if (Cloud.ready) Cloud.push();
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { pauseTimers(); flush(); if (Cloud.ready) Cloud.flush(); } });
+function adoptStored() {
+  const s = Local.read();
+  if (!s || !W) return;
+  state = L.sanitize(s, W);
+  syncedAt = state.at || 0;
+  if (['quiz', 'browse', 'auto', 'result'].includes(screen)) { Voice.stop(); Q = null; B = null; if (A) autoStop(); A = null; go('home'); toast('다른 창에서 한 학습 기록으로 새로 고쳤어요'); }
+  else if (TABBED.includes(screen)) go(screen);
+}
+window.addEventListener('storage', ev => { if (ev.key === K_AT && state && W && Local.at() > (state.at || 0)) adoptStored(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { pauseTimers(); flush(); if (Cloud.ready) Cloud.flush(); }
+  else { if (Q) Q.t0 = Date.now(); if (state && W && Local.at() > (state.at || 0)) adoptStored(); }
+});
 window.addEventListener('pagehide', () => { flush(); if (Cloud.ready) Cloud.flush(); });
 
 /* ---------- sound ---------- */
@@ -1140,9 +1159,9 @@ function tts(text, lang) {
   });
 }
 const Voice = {
-  packs: new Map(), bufs: new Map(), order: [], cur: null, failed: false,
+  packs: new Map(), bufs: new Map(), order: [], cur: null, failed: false, tok: 0,
   available() { return !!(CFG.audio && (!CFG.audio.enc || localStorage.getItem(K_KEY))) && !this.failed; },
-  url(d) { return CFG.audio.base + 'd' + pad2(d) + (CFG.audio.ext || '.bin'); },
+  url(d) { return CFG.audio.base + 'd' + pad2(d) + (CFG.audio.ext || '.bin') + (CFG.audio.enc && CFG.audio.v ? '?v=' + CFG.audio.v : ''); },
   pack(d) {
     if (!this.packs.has(d)) {
       this.packs.set(d, (async () => {
@@ -1177,23 +1196,27 @@ const Voice = {
     if (this.order.length > 90) this.bufs.delete(this.order.shift());
     return ab;
   },
-  stop() { if (this.cur) { try { this.cur.stop(); } catch (e) {} this.cur = null; } try { speechSynthesis.cancel(); } catch (e) {} },
+  stop() { this.tok++; if (this.cur) { try { this.cur.stop(); } catch (e) {} this.cur = null; } try { speechSynthesis.cancel(); } catch (e) {} },
   async play(id) {
     const e = W.byId.get(id);
     if (!e) return;
     Sound.unlock();
     this.stop();
+    const tok = this.tok;
     if (this.available() && Sound.ctx()) {
       try {
         const ab = await this.buffer(e), c = Sound.ctx();
+        if (tok !== this.tok) return;
         if (c.state === 'suspended') await c.resume();
+        if (tok !== this.tok) return;
         const src = c.createBufferSource();
         src.buffer = ab; src.connect(Sound.vbus); src.start();
         this.cur = src;
         await new Promise(res => { src.onended = res; setTimeout(res, ab.duration * 1000 + 400); });
         return;
-      } catch (err) { console.warn('[초록 보카] 발음 파일 재생 실패, 기기 음성으로 대신 읽어요', err); }
+      } catch (err) { if (tok !== this.tok) return; console.warn('[초록 보카] 발음 파일 재생 실패, 기기 음성으로 대신 읽어요', err); }
     }
+    if (tok !== this.tok) return;
     await tts(e.w, 'en-US');
   },
 };
@@ -1277,7 +1300,9 @@ function show(name) {
   $('tabs').hidden = !TABBED.includes(name);
   if (['home', 'words', 'test', 'stats'].includes(name)) tab = name;
   for (const b of document.querySelectorAll('.tab')) { if (b.dataset.tab === (name === 'day' ? 'words' : name === 'settings' ? '' : name)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
-  if (name !== 'quiz') hideFb();
+  if (name !== 'quiz') { hideFb(); $('qbody').innerHTML = ''; $('qfoot').innerHTML = ''; }
+  if (name !== 'browse') $('s-browse').innerHTML = '';
+  if (name !== 'auto') $('s-auto').innerHTML = '';
   window.scrollTo(0, 0);
 }
 function go(name, arg) {
@@ -1292,7 +1317,14 @@ function go(name, arg) {
 
 /* ---------- home ---------- */
 function sessionActive(s, T) { return s && s.T === T && s.i < s.steps.length; }
+function settleSessions() {   // the last answer was saved but the result screen never showed
+  let changed = false;
+  if (state.lesson && state.lesson.i >= state.lesson.steps.length) { L.finishLesson(state, W, state.lesson); state.lesson = null; changed = true; }
+  if (state.test && state.test.i >= state.test.steps.length) { L.finishTest(state, state.test); state.test = null; changed = true; }
+  if (changed) save();
+}
 function renderHome() {
+  if (!Q) settleSessions();
   const T = today(), s = state, st = s.settings;
   if (s.lesson && !sessionActive(s.lesson, T)) s.lesson = null;
   const plan = L.todayPlan(s, W, T), ds = s.days[L.dayKey(T)] || { xp: 0 };
@@ -1420,6 +1452,7 @@ function renderStep() {
   hideFb();
   if (s.i >= s.steps.length) { finish(); return; }
   const st = curStep();
+  if (!W.byId.has(st.id)) { s.steps.splice(s.i, 1); save(); renderStep(); return; }
   if (st.k === 'q' && !st.q) { st.q = L.makeQuestion(W, st.id, st.qt, Voice.available()); save(); }
   progress();
   const e = W.byId.get(st.id), body = $('qbody'), foot = $('qfoot');
@@ -1520,9 +1553,12 @@ function cont() { if (!Q) return; clearTimeout(Q.autoT); Sound.sfx('next'); rend
 function nextLearn() { const s = Q.sess; if (s.kind === 'lesson') L.answerLesson(state, s, true); else s.i++; save(); Sound.sfx('next'); renderStep(); }
 async function quitRun() {
   if (!Q) { go('home'); return; }
+  clearTimeout(Q.autoT);
+  if (Q.sess.i >= Q.sess.steps.length) { finish(); return; }
   pauseTimers();
   const ok = await confirmSheet('그만할까요?', '지금까지 한 건 저장돼요. 다음에 그 문제부터 이어서 할 수 있어요.', '그만하기', '계속하기');
-  if (!ok) return;
+  if (!Q) return;
+  if (!ok) { if ($('fb').classList.contains('show') && !$('fb').classList.contains('bad')) cont(); return; }
   Voice.stop();
   save(); flush();
   const kind = Q.sess.kind;
@@ -1606,7 +1642,7 @@ function faceBack(e) {
 function stageHTML(e, n) {
   return `<div class="stage" id="stage">${n > 1 ? '<div class="deck d2"></div>' : ''}${n > 0 ? '<div class="deck d1"></div>' : ''}
     <div class="drag" id="drag"><div class="card" id="card" tabindex="0" role="button" aria-label="카드 뒤집기"><div class="face front">${faceFront(e)}</div><div class="face back">${faceBack(e)}</div></div>
-    <div class="stamp s-know" id="stampK">${Q ? '알아요' : '다음'}</div><div class="stamp s-dont" id="stampD">${Q ? '몰라요' : '이전'}</div></div></div>`;
+    <div class="stamp s-know" id="stampK">${Q ? '알아요' : '이전'}</div><div class="stamp s-dont" id="stampD">${Q ? '몰라요' : '다음'}</div></div></div>`;
 }
 function renderCardStep(st, e) {
   flipped = false;
@@ -1840,6 +1876,7 @@ function tbIds() {
 }
 const QT = [['mix', '섞어서'], ['mcq-ko', '뜻 고르기'], ['mcq-en', '단어 고르기'], ['syn', '동의어'], ['listen', '듣기'], ['spell', '스펠링']];
 function renderTest() {
+  if (!Q) settleSessions();
   TB = TB || tbDefaults();
   const ids = tbIds(), n = TB.count ? Math.min(TB.count, ids.length) : ids.length;
   const stars = W.words.filter(e => state.stars[e.id]).length, wrong = W.words.filter(e => state.wrong[e.id]).length, learned = Object.keys(state.prog).length;
@@ -1938,6 +1975,7 @@ function renderSettings() {
       <div class="sr"><div class="t"><b>효과음</b><span class="d">정답·오답·완료 소리</span></div>${swHTML('sfx', '효과음')}</div>
       <div class="sr"><div class="t"><b>발음 자동 재생</b><span class="d">단어가 나오면 바로 읽어 주기</span></div>${swHTML('say', '발음 자동 재생')}</div>
       <div class="sr"><div class="t"><b>무음 모드에서도 소리</b><span class="d">아이폰 무음 스위치를 켜도 들려요. 끄면 다른 음악과 같이 들을 수 있어요.</span></div>${swHTML('silent', '무음 모드에서도 소리')}</div>
+      ${PWA && !localStorage.getItem(K_KEY) ? `<div class="sr"><div class="t"><b>AI 발음 받기</b><span class="d">코드를 입력하면 자연스러운 발음 파일을 받아요</span></div><button class="btn sm" type="button" data-act="codeAgain">${I.lock}코드 입력</button></div>` : ''}
       <div class="sr"><div class="t"><b>소리 확인</b><span class="d">${Voice.available() ? 'AI 음성(Kokoro) 발음 파일' : '기기 음성으로 읽어요'}</span></div><button class="btn sm alt" type="button" data-act="soundTest">${I.speaker}들어보기</button></div>
     </div>
     ${PWA ? `<p class="set-h">화면</p><div class="panel set"><div class="sr"><div class="t"><b>테마</b></div>${segHTML('theme', [['system', '시스템'], ['light', '라이트'], ['dark', '다크']])}</div></div>` : ''}
@@ -2004,6 +2042,7 @@ function renderUnlock() {
     <p class="msg" id="unlockMsg" hidden></p>
     <button class="btn" type="button" data-act="unlock" id="unlockBtn">${I.lock}시작하기</button>
     <button class="link" type="button" data-act="wordsFile">코드 대신 단어 파일로 불러오기</button>
+    ${W ? '<button class="link" type="button" data-act="settings">돌아가기</button>' : ''}
   </div>`;
   const inp = $('codeIn');
   inp.addEventListener('input', () => { let v = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4); inp.value = v; });
@@ -2026,7 +2065,7 @@ async function unlock() {
     let plain;
     try { plain = await Crypto.open(key, await res.arrayBuffer()); } catch (e) { unlockMsg('코드가 맞지 않아요. 다시 확인해 주세요.', true); unlockProg(null); return; }
     const data = JSON.parse(new TextDecoder().decode(plain));
-    localStorage.setItem(K_WORDS, JSON.stringify({ v: data.v || 2, rev: CFG.data.rev || '', words: data.words }));
+    localStorage.setItem(K_WORDS, JSON.stringify({ v: data.v || 2, rev: data.rev || '', words: data.words }));
     localStorage.setItem(K_KEY, b64.enc(await crypto.subtle.exportKey('raw', key)));
     Crypto.key = key;
     const days = CFG.audio ? CFG.audio.days : [];
@@ -2036,7 +2075,7 @@ async function unlock() {
     const store = 'caches' in window ? await caches.open('cv-data').catch(() => null) : null;   // the service worker may not control the page yet on the first launch
     const worker = async () => {
       while (queue.length) {
-        const d = queue.shift(), url = new URL(CFG.audio.base + 'd' + pad2(d) + '.bin', location.href).href;
+        const d = queue.shift(), url = new URL(Voice.url(d), location.href).href;
         try { if (store) { if (!(await store.match(url))) await store.add(url); } else await (await fetch(url)).arrayBuffer(); } catch (e) {}
         done++; unlockMsg(`발음 받는 중… ${done}/${days.length}`); unlockProg(0.1 + 0.9 * done / days.length);
       }
@@ -2045,6 +2084,8 @@ async function unlock() {
     try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
     unlockMsg(`${fmt(data.words.length)}단어 준비 완료!`);
     await sleep(500);
+    if (state) flush();
+    Voice.packs.clear(); Voice.bufs.clear(); Voice.order = [];
     startApp(data.words);
   } catch (e) {
     unlockMsg('내려받지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.', true); unlockProg(null);
@@ -2109,6 +2150,7 @@ const ACT = {
     const k = el.dataset.k, raw = el.dataset.v, v = /^\d+$/.test(raw) ? Number(raw) : raw;
     state.settings[k] = v;
     if (k === 'daily') L.refreshPlan(state, W, today());
+    if (k === 'goal') { const ds = state.days[L.dayKey(today())]; if (ds && ds.xp >= v) ds.met = true; }
     if (k === 'theme') applyTheme();
     save(); renderSettings();
   },
@@ -2123,6 +2165,7 @@ const ACT = {
     save(); flush(); toast('기록을 초기화했어요'); go('home');
   },
   unlock: () => unlock(),
+  codeAgain: () => { renderUnlock(); show('unlock'); },
   wordsFile: () => pickFile('words'),
 };
 document.addEventListener('click', ev => {
@@ -2147,6 +2190,7 @@ document.addEventListener('keydown', ev => {
   if (!$('sheet').hidden) { if (ev.key === 'Escape') closeSheet(null); return; }
   const inField = ev.target.closest && ev.target.closest('input,select,textarea');
   if (screen === 'quiz' && Q) {
+    if (ev.repeat && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); return; }
     const st = curStep(), fbOpen = $('fb').classList.contains('show');
     if (inField) { if (ev.key === 'Enter' && ev.target.id === 'spellIn') { ev.preventDefault(); fbOpen ? cont() : spellGo(); } return; }
     if (fbOpen) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); cont(); } return; }
@@ -2157,7 +2201,7 @@ document.addEventListener('keydown', ev => {
       else if (ev.key === 'ArrowRight') cardAnswer(true);
       else if (ev.key === 'ArrowLeft') cardAnswer(false);
     } else if (st.q && st.q.opts && /^[1-4]$/.test(ev.key)) pick(Number(ev.key) - 1);
-    if (ev.key === 's' || ev.key === 'S') Voice.play(st.id);
+    if ((ev.key === 's' || ev.key === 'S') && st.q && st.q.t !== 'mcq-en' && st.q.t !== 'spell') Voice.play(st.id);
     if (ev.key === 'Escape') quitRun();
     return;
   }
@@ -2187,8 +2231,8 @@ async function refreshWords() {   // a newer word list was published: swap it in
     const res = await fetch(CFG.data.words, { cache: 'no-cache' });
     if (!res.ok) return;
     const data = JSON.parse(new TextDecoder().decode(await Crypto.open(await Crypto.stored(), await res.arrayBuffer())));
-    if (!Array.isArray(data.words) || !data.words.length) return;
-    localStorage.setItem(K_WORDS, JSON.stringify({ v: data.v || 2, rev: CFG.data.rev, words: data.words }));
+    if (!Array.isArray(data.words) || !data.words.length || data.rev !== CFG.data.rev) return;   // an older cached copy: try again next launch
+    localStorage.setItem(K_WORDS, JSON.stringify({ v: data.v || 2, rev: data.rev, words: data.words }));
     if (screen === 'quiz' || screen === 'browse' || screen === 'auto') return;   // takes effect on the next launch
     W = L.prepare(data.words);
     state = L.sanitize(state, W);
@@ -2199,6 +2243,8 @@ function storedRev() { try { return (JSON.parse(localStorage.getItem(K_WORDS) ||
 function startApp(rows) {
   W = L.prepare(rows);
   state = L.sanitize(Local.read(), W);
+  syncedAt = state.at || 0;
+  settleSessions();
   if (state.lesson && !sessionActive(state.lesson, today())) state.lesson = null;
   applyTheme();
   go('home');

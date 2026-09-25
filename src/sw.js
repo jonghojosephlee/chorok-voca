@@ -1,4 +1,4 @@
-const VERSION = '2.0.2-1cdeab12ea';
+const VERSION = '__VERSION__';
 const SHELL = 'cv-shell-' + VERSION;
 const DATA = 'cv-data';
 const FONTS = 'cv-fonts';

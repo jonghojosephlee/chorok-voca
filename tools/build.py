@@ -16,16 +16,26 @@ VERSION = '2.0.' + os.environ.get('BUILD_N', '1')
 ITER = 600_000
 
 # ---- words ----
+# example sentences (sent/dayNN.json: {n, si, en, ko}) ride along with each sense: [synonyms, meaning, example, its Korean]
+examples = {}
+for d in range(1, 31):
+    sp = os.path.join(S, 'sent', f'day{d:02d}.json')
+    if os.path.exists(sp):
+        for r in json.load(open(sp)):
+            if (r.get('en') or '').strip():
+                examples[(d, r['n'], r['si'])] = [r['en'].strip(), (r.get('ko') or '').strip()]
 rows = []
 for d in range(1, 31):
     for e in json.load(open(os.path.join(S, 'final', f'day{d:02d}.json'))):
-        senses = [[(s.get('en') or '').strip(), (s.get('ko') or '').strip()] for s in e['senses']]
+        senses = [[(s.get('en') or '').strip(), (s.get('ko') or '').strip()] + examples.get((d, e['n'], si), []) for si, s in enumerate(e['senses'])]
         row = [d, e['n'], e['word'].strip(), senses]
         note, fix = (e.get('note') or '').strip(), (e.get('fix') or '').strip()
         if note or fix: row.append(note)
         if fix: row.append(fix)
         rows.append(row)
 assert len(rows) == 1813, len(rows)
+os.makedirs(DIST, exist_ok=True)
+json.dump({'words': rows}, open(os.path.join(DIST, 'rows.json'), 'w'), ensure_ascii=False)   # plain copy for the node tests; never published
 days = sorted({r[0] for r in rows})
 
 # ---- audio packs: 'CVA1' | count u16 | count x (n u16, offset u32, length u32) | clips ----
@@ -127,5 +137,5 @@ def build_artifact():
 if __name__ == '__main__':
     p = build_pwa(); a = build_artifact()
     tot = sum(len(b) for b in packs.values())
-    print('built', VERSION, '| words', len(rows), '| audio packs', len(packs), f'{tot/1e6:.1f} MB', '| pwa', p, '| artifact', a)
+    print('built', VERSION, '| words', len(rows), '| examples', len(examples), '| audio packs', len(packs), f'{tot/1e6:.1f} MB', '| pwa', p, '| artifact', a)
     print('code', sec['code'][:4] + '-' + sec['code'][4:])

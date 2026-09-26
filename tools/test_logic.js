@@ -2,7 +2,9 @@
 const assert = require('assert');
 const path = require('path');
 const L = require('./src/logic.js');
-const rows = require(path.join(__dirname, '../pwa-data/chorok-voca-data.json')).words;
+const fs = require('fs');
+const rowsPath = fs.existsSync(path.join(__dirname, 'dist/rows.json')) ? path.join(__dirname, 'dist/rows.json') : path.join(__dirname, '../pwa-data/chorok-voca-data.json');
+const rows = require(rowsPath).words;
 L.seed(12345);
 const W = L.prepare(rows);
 assert.strictEqual(W.words.length, 1813);
@@ -43,6 +45,43 @@ for (const e of W.words) {
 }
 console.log('questions made', made, 'fallbacks', fallback);
 
+// 1b) example-sentence formats: the blank and the highlight sit on the headword; options are clean
+let withEx = 0, cz = 0, cx = 0;
+for (const e of W.words) {
+  for (let si = 0; si < e.senses.length; si++) {
+    if (!e.senses[si].ex) continue;
+    withEx++;
+    const parts = L.splitEx(e, si);
+    assert.ok(parts, `${e.id} s${si} example contains the headword`);
+    assert.strictEqual(parts.join(''), e.senses[si].ex);
+    assert.strictEqual(parts[1].toLowerCase(), e.key);
+  }
+  if (!e.senses.some(s => s.ex)) continue;
+  for (let rep = 0; rep < 2; rep++) {
+    const c = L.makeQuestion(W, e.id, 'cloze', true);
+    if (c.t === 'cloze') {
+      cz++;
+      const low = e.senses[c.si].ex.toLowerCase();
+      assert.strictEqual(c.opts[c.a], e.w);
+      assert.strictEqual(new Set(c.opts).size, 4);
+      for (const o of c.opts) if (o !== e.w) { const d = W.words.find(x => x.w === o); assert.ok(!L.related(d, e) && !low.includes(d.key), `${e.id} cloze distractor ${o}`); }
+    }
+    const x = L.makeQuestion(W, e.id, 'ctx', true);
+    if (x.t === 'ctx') {
+      cx++;
+      const low = e.senses[x.si].ex.toLowerCase();
+      assert.ok(L.synonymsOf([e.senses[x.si]]).includes(x.opts[x.a]), `${e.id} ctx answer is a synonym of that sense`);
+      assert.strictEqual(new Set(x.opts).size, 4);
+      for (const o of x.opts) { assert.ok(!low.includes(o), `${e.id} ctx option inside the sentence: ${o}`); if (o !== x.opts[x.a]) assert.ok(!e.synSet.has(o), `${e.id} ctx distractor is a synonym`); }
+    }
+    const t1 = L.makeQuestion(W, e.id, 'clozet', true);
+    assert.ok(t1.t === 'clozet' && t1.parts[1].toLowerCase() === e.key);
+  }
+}
+const dq = L.makeQuestion(W, '1-1', 'dict', true), dq0 = L.makeQuestion(W, '1-1', 'dict', false), s1q = L.makeQuestion(W, '1-1', 'spell1', true);
+assert.ok(dq.t === 'dict' && dq0.t === 'spell' && s1q.t === 'spell' && s1q.lead === 1);
+console.log('senses with examples', withEx, 'cloze made', cz, 'context made', cx);
+
 // 2) spelling check
 const acc = W.byId.get('1-2');
 assert.ok(L.checkSpell(acc, 'Account for') && L.checkSpell(acc, ' account  for ') && !L.checkSpell(acc, 'account'));
@@ -56,6 +95,7 @@ function runLesson(state, T, pCorrect, opts = {}) {
   let guard = 0, retries = 0;
   while (lesson.i < lesson.steps.length) {
     const st = lesson.steps[lesson.i];
+    if (st.k === 'match') { L.answerMatch(state, lesson, 0); continue; }
     const ok = st.k === 'learn' ? true : Math.random() < pCorrect;
     const r = L.answerLesson(state, lesson, ok);
     if (r.retry) retries++;
@@ -71,7 +111,8 @@ const s = L.newState();
 const T0 = L.dayNum(Date.UTC(2026, 8, 26, 12));
 const r1 = runLesson(s, T0, 0.7);
 assert.strictEqual(r1.lesson.newIds.length, 5);
-assert.strictEqual(r1.lesson.base, 10, '5 cards + 5 questions');
+assert.strictEqual(r1.lesson.base, 11, '5 cards + 5 questions + pairs');
+assert.deepStrictEqual([...r1.lesson.steps[r1.lesson.base - 1 + r1.retries].ids].sort(), [...r1.lesson.newIds].sort(), 'the pairs round closes the lesson with its new words');
 assert.strictEqual(L.streak(s, T0), 1, 'one lesson keeps the streak');
 assert.ok(!s.days[L.dayKey(T0)].done);
 assert.strictEqual(L.todayPlan(s, W, T0).newLeft, 5);
@@ -101,7 +142,8 @@ for (let day = 1; day <= 70; day++) {
   while (L.todayPlan(s, W, T).rev > 0 || L.todayPlan(s, W, T).newLeft > 0) {
     const { lesson } = runLesson(s, T, 1);
     maxBase = Math.max(maxBase, lesson.base);
-    assert.ok(lesson.base <= 2 * L.LESSON_NEW + L.LESSON_REV && lesson.base <= Math.max(15, L.REVIEW_LESSON), 'short lesson');
+    assert.ok(lesson.base <= 2 * L.LESSON_NEW + L.LESSON_REV + 1, 'short lesson');
+    if (!lesson.newIds.length && lesson.revIds.length >= 4) assert.strictEqual(lesson.steps[lesson.steps.length - 1].k, 'match', 'review lessons end with pairs');
     assert.ok(++rounds <= 20, 'the day finishes');
   }
 }
@@ -126,14 +168,15 @@ assert.strictEqual(lesson2.steps.length, before + 1);
 assert.strictEqual(s2.prog[wid][0], 1);
 assert.strictEqual(s2.prog[wid][1], T0 + 1, 'missed word stays due today until its retry');
 assert.ok(s2.wrong[wid][0] === 1);
-const retryAt = lesson2.steps.length - 1;
-assert.ok(lesson2.steps[retryAt].id === wid && lesson2.steps[retryAt].r, 'retry placed at the end');
+const retryAt = lesson2.steps.findIndex((x, i) => i > firstQ && x.id === wid && x.r);
+assert.ok(retryAt === lesson2.steps.length - 2 && lesson2.steps[retryAt + 1].k === 'match', 'retry placed at the end, before the pairs round');
 // resume: the lesson object survives JSON round trip
 const copy = JSON.parse(JSON.stringify(lesson2));
 assert.deepStrictEqual(copy.steps, lesson2.steps);
 lesson2.i = retryAt;
 const rr = L.answerLesson(s2, lesson2, false);
-assert.ok(!rr.retry && lesson2.i === lesson2.steps.length, 'no third try');
+assert.ok(!rr.retry && lesson2.i === lesson2.steps.length - 1, 'no third try');
+assert.ok(L.answerMatch(s2, lesson2, 2).xp === 3 && lesson2.i === lesson2.steps.length, 'pairs round: 5 pairs, 2 misses');
 assert.deepStrictEqual(s2.prog[wid].slice(0, 2), [1, T0 + 2], 'second miss comes back tomorrow');
 assert.strictEqual(s2.wrong[wid][0], 2);
 
@@ -141,6 +184,7 @@ assert.strictEqual(s2.wrong[wid][0], 2);
 const s5 = L.newState();
 const worst = runLesson(s5, T0, 0);
 assert.strictEqual(worst.lesson.steps.length, worst.lesson.base + 5);
+assert.strictEqual(worst.lesson.steps[worst.lesson.steps.length - 1].k, 'match');
 for (const id of worst.lesson.newIds) assert.deepStrictEqual(s5.prog[id].slice(0, 2), [1, T0 + 1]);
 
 // a half-done lesson saved by the old version is dropped; a finished one is kept so it can be settled

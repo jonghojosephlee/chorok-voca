@@ -436,11 +436,20 @@ function statusPill(id) {
   const s = L.statusOf(state, id);
   return s === 'new' ? '<span class="pill p-new">새 단어</span>' : s === 'master' ? '<span class="pill p-master">암기 완료</span>' : '<span class="pill p-learn">학습 중</span>';
 }
-function sensesHTML(e) {
+function sensesHTML(e, o = {}) {
   const multi = e.senses.length > 1;
   return '<ol class="senses">' + e.senses.map((s, i) => '<li>' + (multi ? `<span class="no">${i + 1}</span>` : '') + '<div>' +
-    (s.ko ? `<p class="ko">${esc(s.ko)}</p>` : '') + (s.en ? `<p class="en" lang="en"><span class="syn">syn</span>${esc(s.en)}</p>` : '') + '</div></li>').join('') + '</ol>';
+    (s.ko ? `<p class="ko">${esc(s.ko)}</p>` : '') + (s.en ? `<p class="en" lang="en"><span class="syn">syn</span>${esc(s.en)}</p>` : '') +
+    (o.ex && s.ex ? `<p class="exs" lang="en">${exMarked(e, i)}</p>${s.exKo ? `<p class="exk">${esc(s.exKo)}</p>` : ''}` : '') + '</div></li>').join('') + '</ol>';
 }
+function exMarked(e, si) {   // the example with the headword in bold
+  const p = L.splitEx(e, si);
+  return p ? `${esc(p[0])}<b>${esc(p[1])}</b>${esc(p[2])}` : esc(e.senses[si].ex || '');
+}
+function sentHTML(parts, mode) {
+  return `<p class="qsent" lang="en">${esc(parts[0])}${mode === 'blank' ? '<span class="blank" aria-label="빈칸"></span>' : `<mark>${esc(parts[1])}</mark>`}${esc(parts[2])}</p>`;
+}
+const slotText = (w, shown) => { let n = 0; return w.split('').map(c => /[a-z]/i.test(c) ? (n++ < shown ? c : '_') : c === ' ' ? ' ' : c).join(' '); };
 function extrasHTML(e) {
   return (e.note ? `<p class="note"><b>헷갈리는 단어</b>${esc(e.note)}</p>` : '') + (e.fix ? `<p class="fixnote">※ ${esc(e.fix)}</p>` : '');
 }
@@ -609,7 +618,7 @@ function startTest(spec) {
 }
 function run(sess) {
   Q = { sess, t0: Date.now(), locked: false, autoT: 0, hint: 0 };
-  Voice.preload(sess.steps.slice(sess.i, sess.i + 30).map(s => s.id));
+  Voice.preload(sess.steps.slice(sess.i, sess.i + 30).flatMap(s => s.ids || [s.id]));
   show('quiz');
   renderStep();
 }
@@ -628,6 +637,7 @@ function progress() {
 }
 function tagHTML(st) {
   if (Q.sess.kind === 'test') return `<span class="qtag test">${esc(Q.sess.spec.label || '테스트')} · ${Q.sess.i + 1}/${Q.sess.steps.length}</span>`;
+  if (st.k === 'match') return '<span class="qtag">짝 맞추기</span>';
   if (st.r) return '<span class="qtag again">다시 풀기</span>';
   if (st.k === 'learn') return '<span class="qtag">새 단어</span>';
   if (st.nw) return '<span class="qtag">새 단어 확인</span>';
@@ -637,10 +647,11 @@ function wordHead(e) { return charBubble(`<div class="qword"><span class="w ${e.
 function renderStep() {
   const s = Q.sess;
   clearTimeout(Q.autoT);
-  Q.locked = false; Q.hint = 0; Q.hinted = false;
+  Q.locked = false; Q.hint = 0; Q.hinted = false; Q.extra = 0; Q.match = null;
   hideFb();
   if (s.i >= s.steps.length) { finish(); return; }
   const st = curStep();
+  if (st.k === 'match') { renderMatch(st); return; }
   if (!W.byId.has(st.id)) { s.steps.splice(s.i, 1); save(); renderStep(); return; }
   if (st.k === 'q' && !st.q) { st.q = L.makeQuestion(W, st.id, st.qt, Voice.available()); save(); }
   progress();
@@ -649,7 +660,7 @@ function renderStep() {
   if (st.k === 'learn') {
     body.innerHTML = `${tagHTML(st)}<div class="lcard"><div class="idx"><span class="hole"></span><span>DAY ${pad2(e.d)}</span><span>·</span><span>No. ${e.n}</span></div>
       <div class="lword"><span class="w" lang="en">${esc(e.w)}</span><button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button></div>
-      ${sensesHTML(e)}${extrasHTML(e)}</div>`;
+      ${sensesHTML(e, { ex: true })}${extrasHTML(e)}</div>`;
     foot.innerHTML = `<button class="btn" type="button" data-act="next">알겠어요</button>`;
     if (say) Voice.play(e.id);
     return;
@@ -668,16 +679,68 @@ function renderStep() {
   } else if (q.t === 'listen') {
     body.innerHTML = `${tagHTML(st)}<p class="qprompt">듣고 뜻을 고르세요</p>${charBubble(`<div style="display:flex;justify-content:center;padding:4px 0 6px"><button class="say big" type="button" data-act="say" data-id="${e.id}" aria-label="다시 듣기">${I.speaker}</button></div>`)}${optsHTML(false)}`;
     setTimeout(() => { if (curStep() === st) Voice.play(e.id); }, 250);
-  } else if (q.t === 'spell') {
-    const sense = e.senses[q.si], letters = e.w.replace(/[^a-zA-Z]/g, '').length;
-    const slots = e.w.split('').map(c => /[a-z]/i.test(c) ? '_' : c === ' ' ? ' ' : c).join(' ');
-    body.innerHTML = `${tagHTML(st)}<p class="qprompt">뜻을 보고 영어로 쓰세요</p>${charBubble(`<p class="qmean">${esc(sense.ko)}</p>`)}
-      <div class="spell"><input id="spellIn" type="text" inputmode="latin" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="${letters}글자" aria-label="영어 단어 입력"><p class="slots" id="slots" aria-hidden="true">${esc(slots)}</p><p class="qhint" id="spellHint" hidden></p></div>`;
-    foot.innerHTML = `<div class="row"><button class="btn alt" type="button" data-act="hint" style="flex:0 0 38%">힌트</button><button class="btn" type="button" data-act="spellGo">확인</button></div>`;
-    setTimeout(() => { const i = $('spellIn'); if (i) i.focus(); }, 60);
+  } else if (q.t === 'cloze') {
+    body.innerHTML = `${tagHTML(st)}<p class="qprompt">빈칸에 들어갈 단어는?</p>${charBubble(sentHTML(q.parts, 'blank'))}${optsHTML(true)}`;
+  } else if (q.t === 'ctx') {
+    body.innerHTML = `${tagHTML(st)}<p class="qprompt">문장 속 이 단어와 뜻이 가장 가까운 것은?</p>${charBubble(sentHTML(q.parts, 'mark'))}${optsHTML(true)}`;
+    if (say) Voice.play(e.id);
+  } else if (q.t === 'spell' || q.t === 'clozet' || q.t === 'dict') {
+    typeUI(st, e, q);
     return;
   }
   foot.innerHTML = '';
+}
+function typeUI(st, e, q) {   // write the word: from the meaning, into the sentence's blank, or from its sound
+  const sense = e.senses[q.si] || e.senses[0], letters = e.w.replace(/[^a-zA-Z]/g, '').length;
+  let prompt, top;
+  if (q.t === 'spell') { prompt = '뜻을 보고 영어로 쓰세요'; top = `<p class="qmean">${esc(sense.ko)}</p>`; }
+  else if (q.t === 'clozet') { prompt = '빈칸에 들어갈 단어를 쓰세요'; top = sentHTML(q.parts, 'blank') + (sense.exKo ? `<p class="qsko">${esc(sense.exKo)}</p>` : ''); }
+  else { prompt = '듣고 단어를 쓰세요'; top = `<div style="display:flex;justify-content:center;padding:4px 0 6px"><button class="say big" type="button" data-act="say" data-id="${e.id}" aria-label="다시 듣기">${I.speaker}</button></div>`; }
+  $('qbody').innerHTML = `${tagHTML(st)}<p class="qprompt">${prompt}</p>${charBubble(top)}
+    <div class="spell"><input id="spellIn" type="text" inputmode="latin" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="${letters}글자" aria-label="영어 단어 입력"><p class="slots" id="slots" aria-hidden="true">${esc(slotText(e.w, q.lead || 0))}</p><p class="qhint" id="spellHint" hidden></p></div>`;
+  $('qfoot').innerHTML = `<div class="row"><button class="btn alt" type="button" data-act="hint" style="flex:0 0 38%">힌트</button><button class="btn" type="button" data-act="spellGo">확인</button></div>`;
+  if (q.t === 'dict') setTimeout(() => { if (curStep() === st) Voice.play(e.id); }, 250);
+  setTimeout(() => { const i = $('spellIn'); if (i) i.focus(); }, 60);
+}
+function renderMatch(st) {   // tap a word, then its meaning
+  st.ids = st.ids.filter(id => W.byId.has(id));
+  if (st.ids.length < 2) { if (Q.sess.kind === 'lesson') L.answerMatch(state, Q.sess, 0); else Q.sess.i++; save(); renderStep(); return; }
+  progress();
+  const right = L.shuffle(st.ids.slice());
+  const ko = e => { const s = e.senses.find(x => x.ko) || e.senses[0]; return s.ko || s.en; };
+  Q.match = { sel: null, done: new Set(), miss: 0 };
+  $('qbody').innerHTML = `${tagHTML(st)}<p class="qprompt">단어와 뜻을 짝지어 보세요</p><div class="match">
+    <div class="mcol">${st.ids.map(id => `<button class="mt en" type="button" data-act="mpick" data-side="w" data-id="${id}" lang="en">${esc(W.byId.get(id).w)}</button>`).join('')}</div>
+    <div class="mcol">${right.map(id => `<button class="mt" type="button" data-act="mpick" data-side="m" data-id="${id}">${esc(ko(W.byId.get(id)))}</button>`).join('')}</div></div>`;
+  $('qfoot').innerHTML = '';
+}
+function mpick(el) {
+  const M = Q && Q.match;
+  if (!M || el.disabled) return;
+  const side = el.dataset.side, id = el.dataset.id;
+  if (side === 'w' && state.settings.say) Voice.play(id);
+  if (!M.sel || M.sel.dataset.side === side) { if (M.sel) M.sel.classList.remove('sel'); M.sel = el; el.classList.add('sel'); return; }
+  const a = M.sel;
+  M.sel = null; a.classList.remove('sel');
+  if (a.dataset.id === id) {
+    for (const b of [a, el]) { b.classList.add('ok'); b.disabled = true; }
+    M.done.add(id); Sound.sfx('right'); vibrate(10);
+    if (M.done.size === curStep().ids.length) setTimeout(matchDone, 350);
+  } else {
+    M.miss++; Sound.sfx('wrong'); vibrate([30, 40, 30]);
+    for (const b of [a, el]) { b.classList.remove('bad'); void b.offsetWidth; b.classList.add('bad'); }
+  }
+}
+function matchDone() {
+  if (!Q || !Q.match) return;
+  const s = Q.sess, miss = Q.match.miss;
+  const res = s.kind === 'lesson' ? L.answerMatch(state, s, miss) : (s.i++, { xp: 0 });
+  Q.match = null;
+  save(); progress();
+  $('fbIn').innerHTML = `<div class="hd"><i>${I.check}</i><span>${miss ? '짝 맞추기 끝!' : '한 번에 다 맞혔어요!'}</span>${res.xp ? `<span class="xp">${I.bolt}+${res.xp} XP</span>` : ''}</div><button class="btn" type="button" data-act="cont">계속</button>`;
+  const fb = $('fb'); fb.classList.remove('bad'); fb.classList.add('show');
+  Sound.sfx('combo');
+  Q.autoT = setTimeout(cont, 1100);
 }
 function pick(i) {
   if (Q.locked) return;
@@ -691,7 +754,7 @@ function spellGo() {
   if (Q.locked) return;
   const inp = $('spellIn'); if (!inp) return;
   if (!inp.value.trim()) { inp.focus(); return; }
-  const st = curStep(), e = W.byId.get(st.id), spelled = L.checkSpell(e, inp.value), ok = spelled && Q.hint < 2;
+  const st = curStep(), e = W.byId.get(st.id), spelled = L.checkSpell(e, inp.value), ok = spelled && !Q.extra;
   Q.hinted = spelled && !ok;
   Q.locked = true;
   inp.classList.add(ok ? 'right' : 'wrong');
@@ -699,15 +762,13 @@ function spellGo() {
   inp.blur();
   resolve(ok, st);
 }
-function hint() {
-  const st = curStep(), e = W.byId.get(st.id), h = $('spellHint'), slots = $('slots');
-  Q.hint++;
-  if (Q.hint === 1) { h.hidden = false; h.textContent = '동의어: ' + (e.senses[st.q.si].en || e.senses[0].en); }
-  else {
-    let shown = 0;
-    const need = Q.hint - 1;
-    slots.textContent = e.w.split('').map(c => /[a-z]/i.test(c) ? (shown++ < need ? c : '_') : c === ' ' ? ' ' : c).join(' ');
-  }
+function hint() {   // first a free clue (synonyms, or the meaning when listening), then one more letter each time
+  const st = curStep(), q = st.q, e = W.byId.get(st.id), h = $('spellHint'), slots = $('slots');
+  const sense = e.senses[q.si] || e.senses[0];
+  const clue = q.t === 'dict' ? (sense.ko ? '뜻: ' + sense.ko : '') : q.t === 'spell' && sense.en ? '동의어: ' + sense.en : '';
+  if (!Q.hint && clue) { Q.hint = 1; h.hidden = false; h.textContent = clue; return; }
+  Q.hint = 1; Q.extra++;
+  slots.textContent = slotText(e.w, (q.lead || 0) + Q.extra);
 }
 const PRAISE = ['정답이에요!', '좋아요!', '완벽해요!', '잘했어요!', '훌륭해요!'];
 function resolve(ok, st) {
@@ -727,17 +788,20 @@ function showFb(ok, st, res) {
   const combo = res.combo >= 3 && ok ? ` <span style="font-size:15px;font-weight:700">${res.combo}연속!</span>` : '';
   const head = `<div class="hd"><i>${ok ? I.check : I.x}</i><span>${ok ? PRAISE[Math.floor(Math.random() * PRAISE.length)] : Q.hinted ? '맞았지만 힌트를 썼어요' : '아쉬워요'}${combo}</span>${res.xp ? `<span class="xp">${I.bolt}+${res.xp} XP</span>` : ''}</div>`;
   let ans = '';
-  if (!ok || q.t === 'listen' || q.t === 'spell') {
-    const right = q.t === 'mcq-ko' || q.t === 'listen' ? e.senses[q.si].ko : q.t === 'syn' ? q.opts[q.a] : e.w;
-    ans = `<div class="ans">${!ok && q.t !== 'spell' && q.t !== 'card' ? `<div>정답: <b>${esc(right)}</b></div>` : ''}<div><span class="w" lang="en">${esc(e.w)}</span> <span class="m">${esc(meaningLine(e))}</span></div></div>`;
+  const typed = q.t === 'spell' || q.t === 'clozet' || q.t === 'dict', inSent = q.t === 'cloze' || q.t === 'clozet' || q.t === 'ctx';
+  if (!ok || typed || inSent || q.t === 'listen') {
+    const right = q.t === 'mcq-ko' || q.t === 'listen' ? e.senses[q.si].ko : q.t === 'syn' || q.t === 'ctx' ? q.opts[q.a] : e.w;
+    const si = q.si != null ? q.si : 0, sense = e.senses[si] || {};
+    const ex = sense.ex && (inSent || !ok) ? `<div class="ex"><p lang="en">${exMarked(e, si)}</p>${sense.exKo ? `<small>${esc(sense.exKo)}</small>` : ''}</div>` : '';
+    ans = `<div class="ans">${!ok && !typed && q.t !== 'card' ? `<div>정답: <b>${esc(right)}</b></div>` : ''}<div><span class="w" lang="en">${esc(e.w)}</span> <span class="m">${esc(meaningLine(e))}</span></div>${ex}</div>`;
   }
   $('fbIn').innerHTML = head + ans + `<button class="btn ${ok ? '' : 'bad'}" type="button" data-act="cont">계속</button>`;
   const fb = $('fb');
   fb.classList.toggle('bad', !ok);
   fb.classList.add('show');
   $('qfoot').innerHTML = '';
-  if ((!ok || q.t === 'listen' || q.t === 'spell' || q.t === 'mcq-en') && state.settings.say) Voice.play(e.id);
-  if (ok) Q.autoT = setTimeout(cont, q.t === 'spell' || q.t === 'listen' || q.t === 'mcq-en' ? 1500 : 1000);
+  if ((!ok || typed || q.t === 'listen' || q.t === 'mcq-en' || q.t === 'cloze') && state.settings.say) Voice.play(e.id);
+  if (ok) Q.autoT = setTimeout(cont, inSent ? 2400 : typed || q.t === 'listen' || q.t === 'mcq-en' ? 1500 : 1000);
 }
 function hideFb() { const fb = $('fb'); if (fb) fb.classList.remove('show', 'bad'); }
 function cont() { if (!Q) return; clearTimeout(Q.autoT); Sound.sfx('next'); renderStep(); }
@@ -832,7 +896,7 @@ function faceFront(e) {
 }
 function faceBack(e) {
   return `<div class="idx"><span class="hole"></span><span>DAY ${pad2(e.d)}</span><span>·</span><span>No. ${e.n}</span></div><button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button>
-    <div class="lword" style="padding-right:48px"><span class="w" lang="en">${esc(e.w)}</span></div>${sensesHTML(e)}${extrasHTML(e)}`;
+    <div class="lword" style="padding-right:48px"><span class="w" lang="en">${esc(e.w)}</span></div>${sensesHTML(e, { ex: true })}${extrasHTML(e)}`;
 }
 function stageHTML(e, n) {
   return `<div class="stage" id="stage">${n > 1 ? '<div class="deck d2"></div>' : ''}${n > 0 ? '<div class="deck d1"></div>' : ''}
@@ -1069,7 +1133,7 @@ function tbIds() {
   const r = TB.range === 'days' ? { t: 'days', days: TB.days } : { t: TB.range };
   return L.rangeIds(state, W, r, today());
 }
-const QT = [['mix', '섞어서'], ['mcq-ko', '뜻 고르기'], ['mcq-en', '단어 고르기'], ['syn', '동의어'], ['listen', '듣기'], ['spell', '스펠링']];
+const QT = [['mix', '섞어서'], ['mcq-ko', '뜻 고르기'], ['mcq-en', '단어 고르기'], ['syn', '동의어'], ['cloze', '예문 빈칸'], ['ctx', '문장 속 뜻'], ['listen', '듣기'], ['spell', '한글 보고 쓰기'], ['dict', '받아쓰기']];
 function renderTest() {
   if (!Q) settleSessions();
   TB = TB || tbDefaults();
@@ -1161,7 +1225,7 @@ function renderSettings() {
       <div class="sr"><div class="t"><b>하루 새 단어</b><span class="d">매일 새로 익힐 단어 수 · 5개마다 레슨 1개</span></div>${segHTML('daily', [[5, '5'], [10, '10'], [15, '15'], [20, '20'], [30, '30']])}</div>
       <div class="sr"><div class="t"><b>하루 목표 XP</b><span class="d">연속 학습은 레슨 하나만 해도 이어져요</span></div>${segHTML('goal', [[20, '20'], [50, '50'], [80, '80'], [120, '120']])}</div>
       <div class="sr"><div class="t"><b>복습 방식</b><span class="d">퀴즈로 풀기, 또는 카드로 알아요/몰라요</span></div>${segHTML('review', [['quiz', '퀴즈'], ['card', '카드']])}</div>
-      <div class="sr"><div class="t"><b>스펠링 문제</b><span class="d">잘 아는 단어는 직접 쓰기로 복습</span></div>${swHTML('spell', '스펠링 문제')}</div>
+      <div class="sr"><div class="t"><b>직접 쓰는 문제</b><span class="d">복습 때 한글 보고 쓰기·빈칸 쓰기·받아쓰기도 내기</span></div>${swHTML('spell', '스펠링 문제')}</div>
       <div class="sr"><div class="t"><b>카드 앞면</b><span class="d">카드로 볼 때 먼저 보일 쪽</span></div>${segHTML('front', [['en', '영어'], ['ko', '한국어']])}</div>
       <div class="sr"><div class="t"><b>새 단어 시작 Day</b><span class="d">이미 아는 Day는 건너뛰기</span></div><select data-set="start" aria-label="새 단어 시작 Day">${W.days.map(d => `<option value="${d}" ${d === st.start ? 'selected' : ''}>Day ${pad2(d)}부터</option>`).join('')}</select></div>
     </div>
@@ -1307,6 +1371,7 @@ const ACT = {
   lessonMore: () => startLesson({ more: true }),
   next: () => nextLearn(),
   pick: el => pick(Number(el.dataset.i)),
+  mpick: el => mpick(el),
   cont: () => cont(),
   quit: () => quitRun(),
   hint: () => hint(),
@@ -1396,7 +1461,7 @@ document.addEventListener('keydown', ev => {
       else if (ev.key === 'ArrowRight') cardAnswer(true);
       else if (ev.key === 'ArrowLeft') cardAnswer(false);
     } else if (st.q && st.q.opts && /^[1-4]$/.test(ev.key)) pick(Number(ev.key) - 1);
-    if ((ev.key === 's' || ev.key === 'S') && st.q && st.q.t !== 'mcq-en' && st.q.t !== 'spell') Voice.play(st.id);
+    if ((ev.key === 's' || ev.key === 'S') && st.q && !['mcq-en', 'spell', 'cloze', 'clozet'].includes(st.q.t)) Voice.play(st.id);
     if (ev.key === 'Escape') quitRun();
     return;
   }

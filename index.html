@@ -262,7 +262,7 @@ svg{display:block}
 .opt{width:100%;text-align:left;padding:13px 14px;border-radius:16px;border:2px solid var(--line);background:var(--surface);box-shadow:0 4px 0 var(--line);font-size:17px;font-weight:800;line-height:1.35;display:flex;gap:12px;align-items:center;min-height:60px;transition:transform .08s,box-shadow .08s,background-color .15s,border-color .15s}
 .opt:active:not(:disabled){transform:translateY(4px);box-shadow:0 0 0 var(--line)}
 .opt .k{width:30px;height:30px;border-radius:9px;border:2px solid var(--line);display:grid;place-items:center;font-size:14px;font-weight:900;color:var(--ink-3);flex:none}
-.opt.en{font-size:19px}
+.opt.en{font-size:19px;color:var(--ink);font-weight:800;line-height:1.35;margin-top:0}
 .opt.right{border-color:var(--green);background:var(--green-soft);box-shadow:0 4px 0 var(--green);color:var(--green-ink)}
 .opt.right .k{border-color:var(--green);background:var(--green);color:#fff}
 .opt.wrong{border-color:var(--red);background:var(--red-soft);box-shadow:0 4px 0 var(--red);color:var(--red-ink);animation:shake .4s}
@@ -275,6 +275,20 @@ svg{display:block}
 .spell input.right{border-color:var(--green);background:var(--green-soft);color:var(--green-ink)}
 .spell input.wrong{border-color:var(--red);background:var(--red-soft);color:var(--red-ink);animation:shake .4s}
 .slots{font-size:17px;font-weight:900;letter-spacing:.22em;color:var(--ink-3)}
+/* sentence questions */
+.qsent{font-size:clamp(18px,5vw,21px);font-weight:700;line-height:1.55;color:var(--ink);text-wrap:pretty}
+.qsent mark{background:var(--gold-soft);color:var(--ink);border-radius:6px;padding:0 4px;box-shadow:inset 0 -3px 0 var(--gold);font-weight:900}
+.qsent .blank{display:inline-block;width:4.4em;height:1.05em;border-bottom:3px solid var(--blue-2);vertical-align:-3px;margin:0 3px}
+.qsko{margin-top:8px;font-size:15px;font-weight:700;color:var(--ink-2);line-height:1.5}
+/* pairs round */
+.match{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mcol{display:flex;flex-direction:column;gap:10px}
+.mt{min-height:58px;padding:8px 10px;border-radius:16px;border:2px solid var(--line);background:var(--surface);box-shadow:0 4px 0 var(--line);font-size:15.5px;font-weight:800;line-height:1.3;text-align:center;overflow-wrap:anywhere;color:var(--ink);transition:transform .08s,box-shadow .08s,background-color .15s,border-color .15s,opacity .25s}
+.mt.en{font-size:17.5px;color:var(--ink);font-weight:800;line-height:1.3;margin-top:0}
+.mt:active:not(:disabled){transform:translateY(4px);box-shadow:0 0 0 var(--line)}
+.mt.sel{border-color:var(--blue-2);background:var(--blue-soft);box-shadow:0 4px 0 var(--blue-2);color:var(--blue)}
+.mt.ok{border-color:var(--green);background:var(--green-soft);box-shadow:0 4px 0 var(--green);color:var(--green-ink);opacity:.5}
+.mt.bad{border-color:var(--red);background:var(--red-soft);box-shadow:0 4px 0 var(--red);color:var(--red-ink);animation:shake .4s}
 .qfoot{position:sticky;bottom:0;padding-top:14px;padding-bottom:4px;background:linear-gradient(to top,var(--bg) 72%,transparent)}
 
 /* learn card + flashcards */
@@ -286,6 +300,9 @@ svg{display:block}
 .senses{display:flex;flex-direction:column;gap:13px}
 .senses li{display:flex;gap:10px}
 .senses .no{width:24px;height:24px;border-radius:8px;background:var(--green-soft);color:var(--green-ink);font-size:13px;font-weight:900;display:grid;place-items:center;flex:none;margin-top:3px}
+.senses .exs{margin-top:7px;font-size:15px;font-weight:600;line-height:1.5;color:var(--ink-2)}
+.senses .exs b{color:var(--ink);font-weight:900}
+.senses .exk{margin-top:1px;font-size:14px;font-weight:600;line-height:1.5;color:var(--ink-3)}
 .ko{font-size:19px;font-weight:800;line-height:1.4}
 .en{font-size:16.5px;font-weight:700;color:var(--ink-2);line-height:1.4;margin-top:2px}
 .syn{display:inline-block;font-size:11px;font-weight:900;letter-spacing:.06em;color:var(--blue);background:var(--blue-soft);border-radius:6px;padding:1px 6px;margin-right:6px;vertical-align:2px}
@@ -334,6 +351,10 @@ input[type=range]{width:100%;accent-color:var(--green)}
 .fb .ans .w{font-weight:900;font-size:20px}
 .fb .ans .m{color:var(--ink-2)}
 .fb.bad .ans b{color:var(--red-ink)}
+.fb .ans .ex{margin-top:6px}
+.fb .ans .ex p{font-size:15.5px;font-weight:600;line-height:1.5}
+.fb .ans .ex p b{color:inherit;font-weight:900}
+.fb .ans .ex small{display:block;margin-top:2px;font-size:14px;font-weight:600;line-height:1.45;color:var(--ink-2)}
 
 /* result */
 .result{align-items:center;text-align:center;justify-content:center;gap:18px;padding-top:18px}
@@ -529,7 +550,7 @@ select{font-size:16px;font-weight:800;padding:9px 12px;border-radius:12px;border
 <div class="toast" id="toast" role="status" hidden></div>
 <canvas id="confetti" hidden></canvas>
 <input type="file" id="filePick" class="vh" tabindex="-1" aria-hidden="true">
-<script>window.__CV__ = {"mode": "pwa", "version": "2.0.6", "crypto": {"salt": "5XuliZAP9T9FrI1CC7f7sg==", "iter": 600000}, "data": {"words": "data/words.bin", "rev": "1a89ee1d6703"}, "audio": {"base": "data/audio/", "enc": true, "v": "5c2459ab44", "days": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}};</script>
+<script>window.__CV__ = {"mode": "pwa", "version": "2.0.7", "crypto": {"salt": "5XuliZAP9T9FrI1CC7f7sg==", "iter": 600000}, "data": {"words": "data/words.bin", "rev": "1a89ee1d6703"}, "audio": {"base": "data/audio/", "enc": true, "v": "5c2459ab44", "days": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}};</script>
 <script></script>
 <script>
 /* 초록 보카 core logic: words, spaced repetition, question generation, lessons and tests.
@@ -542,7 +563,8 @@ const Logic = (() => {
   const MASTER = 5;                                 // box at which a word counts as mastered
   const DAYMS = 864e5, SHIFT = 4 * 36e5;            // a study day rolls over at 4am local time
   const LESSON_NEW = 5, LESSON_REV = 5, REVIEW_LESSON = 10;   // a lesson: 5 new words + up to 5 reviews, or 10 reviews
-  const MIX_TYPES = ['mcq-ko', 'mcq-en', 'syn', 'listen', 'spell'];
+  const MIX_TYPES = ['mcq-ko', 'mcq-en', 'syn', 'listen', 'spell', 'cloze', 'ctx', 'dict'];
+  const AUDIO_TYPES = ['listen', 'dict'];
 
   const dayNum = (t = Date.now()) => { const d = new Date(t - SHIFT); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / DAYMS); };
   const dayKey = n => new Date(n * DAYMS).toISOString().slice(0, 10);
@@ -586,7 +608,7 @@ const Logic = (() => {
   }
   function prepare(rows) {
     const words = rows.map((r, i) => {
-      const senses = r[3].map(s => ({ en: s[0] || '', ko: s[1] || '' }));
+      const senses = r[3].map(s => ({ en: s[0] || '', ko: s[1] || '', ex: s[2] || '', exKo: s[3] || '' }));
       const e = { id: r[0] + '-' + r[1], d: r[0], n: r[1], w: r[2], senses, note: r[4] || '', fix: r[5] || '', i };
       e.key = e.w.toLowerCase();
       e.pos = posOf(senses[0].ko || '');
@@ -649,6 +671,43 @@ const Logic = (() => {
     const ds = draw(tiers(W, e, c => !related(c, e)), 3, c => c.w, new Set([e.w]));
     return finish({ t: 'mcq-en', id: e.id, si }, e.w, [e.w, ...ds]);
   }
+  // a sense's example split around the headword: [before, the word as written, after]
+  function splitEx(e, si) {
+    const ex = e.senses[si] && e.senses[si].ex;
+    if (!ex) return null;
+    const m = new RegExp('(^|[^A-Za-z-])(' + e.w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?![A-Za-z-])', 'i').exec(ex);
+    if (!m) return null;
+    const at = m.index + m[1].length;
+    return [ex.slice(0, at), ex.slice(at, at + m[2].length), ex.slice(at + m[2].length)];
+  }
+  function exSense(e) {
+    const ok = e.senses.map((s, i) => (splitEx(e, i) ? i : -1)).filter(i => i >= 0);
+    return ok.length ? pick(ok) : -1;
+  }
+  function qCloze(W, e, typed) {   // fill the blank in the example sentence
+    const si = exSense(e);
+    if (si < 0) return null;
+    const parts = splitEx(e, si);
+    if (typed) return { t: 'clozet', id: e.id, si, parts };
+    const low = e.senses[si].ex.toLowerCase(), size = e.w.split(' ').length;
+    const free = c => !related(c, e) && !low.includes(c.key);
+    const ds = draw(tiers(W, e, c => free(c) && c.w.split(' ').length === size).concat([W.words.filter(free)]), 3, c => c.w, new Set([e.w]));
+    return finish({ t: 'cloze', id: e.id, si, parts }, e.w, [e.w, ...ds]);
+  }
+  function qContext(W, e) {   // TOEFL style: the word in the sentence is closest in meaning to
+    const si = exSense(e);
+    if (si < 0) return null;
+    const low = e.senses[si].ex.toLowerCase();
+    const pool = synonymsOf([e.senses[si]]).filter(s => s !== e.key && shortOpt(s) && !low.includes(s));
+    if (!pool.length) return null;
+    const correct = pick(pool.slice(0, 4));
+    const taken = new Set([e.key, ...e.syn]);
+    const ds = draw(tiers(W, e, c => !related(c, e)), 3, c => {
+      const cand = c.syn.filter(s => !taken.has(s) && s !== c.key && shortOpt(s) && !low.includes(s));
+      return cand.length ? pick(cand) : null;
+    }, taken);
+    return finish({ t: 'ctx', id: e.id, si, parts: splitEx(e, si) }, correct, [correct, ...ds]);
+  }
   function qSynonym(W, e) {
     const pool = e.syn.filter(s => s !== e.key && shortOpt(s));
     if (!pool.length) return null;
@@ -664,13 +723,19 @@ const Logic = (() => {
     const e = W.byId.get(id);
     if (!e) return null;
     if (type === 'listen' && !hasAudio) type = 'mcq-ko';
-    const order = { 'mcq-ko': ['mcq-ko'], listen: ['listen', 'mcq-ko'], 'mcq-en': ['mcq-en', 'mcq-ko'], syn: ['syn', 'mcq-en', 'mcq-ko'], spell: ['spell'], card: ['card'] }[type] || ['mcq-ko'];
+    if (type === 'dict' && !hasAudio) type = 'spell';
+    const order = { 'mcq-ko': ['mcq-ko'], listen: ['listen', 'mcq-ko'], 'mcq-en': ['mcq-en', 'mcq-ko'], syn: ['syn', 'mcq-en', 'mcq-ko'],
+      spell: ['spell'], spell1: ['spell1'], dict: ['dict'], cloze: ['cloze', 'mcq-en', 'mcq-ko'], clozet: ['clozet', 'spell1'],
+      ctx: ['ctx', 'syn', 'mcq-en', 'mcq-ko'], card: ['card'] }[type] || ['mcq-ko'];
     for (const t of order) {
       let q = null;
       if (t === 'mcq-ko' || t === 'listen') q = qMeaning(W, e, t);
       else if (t === 'mcq-en') q = qWord(W, e);
       else if (t === 'syn') q = qSynonym(W, e);
-      else if (t === 'spell') q = { t: 'spell', id, si: senseIndex(e) };
+      else if (t === 'spell' || t === 'spell1') q = { t: 'spell', id, si: senseIndex(e), lead: t === 'spell1' ? 1 : 0 };   // lead: letters shown up front
+      else if (t === 'dict') q = { t: 'dict', id, si: senseIndex(e) };
+      else if (t === 'cloze' || t === 'clozet') q = qCloze(W, e, t === 'clozet');
+      else if (t === 'ctx') q = qContext(W, e);
       else if (t === 'card') q = { t: 'card', id };
       if (q) return q;
     }
@@ -765,12 +830,17 @@ const Logic = (() => {
   function reviewType(box, settings, hasAudio) {
     if (settings.review === 'card') return 'card';
     const r = rand();
-    if (box <= 1) return hasAudio && r < 0.3 ? 'listen' : 'mcq-ko';
-    if (box === 2) return r < 0.5 ? 'mcq-en' : 'syn';
-    if (box <= 4) return r < 0.4 ? 'syn' : r < 0.7 ? 'mcq-en' : (hasAudio ? 'listen' : 'mcq-ko');
-    return settings.spell ? (r < 0.6 ? 'spell' : 'syn') : (r < 0.5 ? 'syn' : 'mcq-en');
+    let t;
+    if (box <= 1) t = r < 0.35 ? 'mcq-ko' : r < 0.6 ? 'mcq-en' : r < 0.8 ? 'cloze' : 'listen';
+    else if (box === 2) t = r < 0.3 ? 'spell1' : r < 0.55 ? 'cloze' : r < 0.8 ? 'ctx' : 'mcq-en';
+    else if (box <= 4) t = r < 0.3 ? 'spell1' : r < 0.55 ? 'ctx' : r < 0.8 ? 'clozet' : 'dict';
+    else t = r < 0.35 ? 'spell' : r < 0.7 ? 'clozet' : 'ctx';
+    if (t === 'listen' && !hasAudio) t = 'mcq-ko';
+    if (t === 'dict' && !hasAudio) t = 'spell1';
+    if (!settings.spell) t = { spell: 'mcq-en', spell1: 'mcq-en', clozet: 'cloze', dict: 'listen' }[t] || t;
+    return t;
   }
-  function retryType(t) { return t === 'spell' ? 'spell' : t === 'card' ? 'card' : t === 'listen' ? 'mcq-ko' : t; }
+  function retryType(t) { return t === 'listen' ? 'mcq-ko' : t; }
   function buildLesson(state, W, T, opts = {}) {
     const s = state.settings, hasAudio = !!opts.hasAudio;
     ensurePlan(state, W, T);
@@ -785,6 +855,8 @@ const Logic = (() => {
     const steps = shuffle(rev.map(id => ntSet.has(id) ? { k: 'q', id, qt: 'mcq-ko', nw: 1 } : { k: 'q', id, qt: reviewType(state.prog[id][0], s, hasAudio) }));
     for (const id of fresh) steps.push({ k: 'learn', id });
     for (const id of shuffle(fresh.slice())) steps.push({ k: 'q', id, qt: 'mcq-ko', nw: 1 });
+    if (fresh.length >= 3) steps.push({ k: 'match', ids: shuffle(fresh.slice()) });
+    else if (!fresh.length && rev.length >= 4) steps.push({ k: 'match', ids: shuffle(rev.slice()).slice(0, 5) });
     const d = state.days[dayKey(T)];
     return {
       kind: 'lesson', v: 3, T, no: ((d && d.lessons) || 0) + 1, created: Date.now(), steps, i: 0, base: steps.length, fin: 0,
@@ -800,7 +872,7 @@ const Logic = (() => {
     const st = L.steps[L.i];
     const res = { xp: 0, first: false, combo: L.stat.combo, retry: false, done: false };
     if (!st) return res;
-    if (st.k === 'learn') { L.i++; L.fin = (L.fin || 0) + 1; return res; }
+    if (st.k === 'learn' || st.k === 'match') { L.i++; L.fin = (L.fin || 0) + 1; return res; }
     const id = st.id, T = L.T;
     const first = !L.seen[id];
     L.seen[id] = (L.seen[id] || 0) + 1;
@@ -827,7 +899,8 @@ const Logic = (() => {
       if (!st.r) {   // asked once more at the end of the lesson
         const again = { k: 'q', id, qt: retryType(st.qt), r: 1 };
         if (st.nw) again.nw = 1;
-        L.steps.push(again);
+        const last = L.steps.length - 1, beforeMatch = L.steps[last].k === 'match' && L.i < last;   // retries come before the pairs round
+        L.steps.splice(beforeMatch ? last : L.steps.length, 0, again);
         res.retry = true;
       }
     }
@@ -842,6 +915,15 @@ const Logic = (() => {
     res.combo = L.stat.combo;
     L.i++;
     return res;
+  }
+  function answerMatch(state, L, misses) {   // the pairs round: practice only, the schedule does not change
+    const st = L.steps[L.i];
+    if (!st || st.k !== 'match') return { xp: 0 };
+    const xp = Math.max(1, st.ids.length - misses);
+    addXp(state, dayStats(state, L.T), xp);
+    L.stat.xp += xp;
+    L.i++; L.fin = (L.fin || 0) + 1;
+    return { xp };
   }
   function finishLesson(state, W, L) {
     const T = L.T, ds = dayStats(state, T), bonus = 10;
@@ -867,7 +949,7 @@ const Logic = (() => {
     let ids = rangeIds(state, W, spec.range, T);
     ids = spec.range.t === 'ids' ? ids.slice() : shuffle(ids.slice());
     if (spec.count && spec.count < ids.length) ids = ids.slice(0, spec.count);
-    const steps = ids.map(id => ({ k: 'q', id, qt: spec.qt === 'mix' ? pick(spec.hasAudio ? MIX_TYPES : MIX_TYPES.filter(t => t !== 'listen')) : spec.qt }));
+    const steps = ids.map(id => ({ k: 'q', id, qt: spec.qt === 'mix' ? pick(spec.hasAudio ? MIX_TYPES : MIX_TYPES.filter(t => !AUDIO_TYPES.includes(t))) : spec.qt }));
     return { kind: 'test', T, created: Date.now(), spec, steps, i: 0, answers: [], stat: { ok: 0, n: 0, xp: 0, combo: 0, maxCombo: 0, ms: 0 } };
   }
   function answerTest(state, X, correct) {
@@ -906,10 +988,10 @@ const Logic = (() => {
 
   return {
     INTERVAL, MAXBOX, MASTER, MIX_TYPES, LESSON_NEW, LESSON_REV, REVIEW_LESSON, dayNum, dayKey, seed, shuffle, pick,
-    stems, posOf, synonymsOf, prepare, related, makeQuestion, checkSpell, normSpell,
+    stems, posOf, synonymsOf, prepare, related, makeQuestion, splitEx, checkSpell, normSpell,
     defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, addXp, streak, touchBest,
     pickNew, ensurePlan, refreshPlan, todayPlan, statusOf,
-    buildLesson, lessonUnits, answerLesson, finishLesson,
+    buildLesson, lessonUnits, answerLesson, answerMatch, finishLesson,
     rangeIds, buildTest, answerTest, finishTest, clearWrong,
   };
 })();
@@ -1355,11 +1437,20 @@ function statusPill(id) {
   const s = L.statusOf(state, id);
   return s === 'new' ? '<span class="pill p-new">새 단어</span>' : s === 'master' ? '<span class="pill p-master">암기 완료</span>' : '<span class="pill p-learn">학습 중</span>';
 }
-function sensesHTML(e) {
+function sensesHTML(e, o = {}) {
   const multi = e.senses.length > 1;
   return '<ol class="senses">' + e.senses.map((s, i) => '<li>' + (multi ? `<span class="no">${i + 1}</span>` : '') + '<div>' +
-    (s.ko ? `<p class="ko">${esc(s.ko)}</p>` : '') + (s.en ? `<p class="en" lang="en"><span class="syn">syn</span>${esc(s.en)}</p>` : '') + '</div></li>').join('') + '</ol>';
+    (s.ko ? `<p class="ko">${esc(s.ko)}</p>` : '') + (s.en ? `<p class="en" lang="en"><span class="syn">syn</span>${esc(s.en)}</p>` : '') +
+    (o.ex && s.ex ? `<p class="exs" lang="en">${exMarked(e, i)}</p>${s.exKo ? `<p class="exk">${esc(s.exKo)}</p>` : ''}` : '') + '</div></li>').join('') + '</ol>';
 }
+function exMarked(e, si) {   // the example with the headword in bold
+  const p = L.splitEx(e, si);
+  return p ? `${esc(p[0])}<b>${esc(p[1])}</b>${esc(p[2])}` : esc(e.senses[si].ex || '');
+}
+function sentHTML(parts, mode) {
+  return `<p class="qsent" lang="en">${esc(parts[0])}${mode === 'blank' ? '<span class="blank" aria-label="빈칸"></span>' : `<mark>${esc(parts[1])}</mark>`}${esc(parts[2])}</p>`;
+}
+const slotText = (w, shown) => { let n = 0; return w.split('').map(c => /[a-z]/i.test(c) ? (n++ < shown ? c : '_') : c === ' ' ? ' ' : c).join(' '); };
 function extrasHTML(e) {
   return (e.note ? `<p class="note"><b>헷갈리는 단어</b>${esc(e.note)}</p>` : '') + (e.fix ? `<p class="fixnote">※ ${esc(e.fix)}</p>` : '');
 }
@@ -1528,7 +1619,7 @@ function startTest(spec) {
 }
 function run(sess) {
   Q = { sess, t0: Date.now(), locked: false, autoT: 0, hint: 0 };
-  Voice.preload(sess.steps.slice(sess.i, sess.i + 30).map(s => s.id));
+  Voice.preload(sess.steps.slice(sess.i, sess.i + 30).flatMap(s => s.ids || [s.id]));
   show('quiz');
   renderStep();
 }
@@ -1547,6 +1638,7 @@ function progress() {
 }
 function tagHTML(st) {
   if (Q.sess.kind === 'test') return `<span class="qtag test">${esc(Q.sess.spec.label || '테스트')} · ${Q.sess.i + 1}/${Q.sess.steps.length}</span>`;
+  if (st.k === 'match') return '<span class="qtag">짝 맞추기</span>';
   if (st.r) return '<span class="qtag again">다시 풀기</span>';
   if (st.k === 'learn') return '<span class="qtag">새 단어</span>';
   if (st.nw) return '<span class="qtag">새 단어 확인</span>';
@@ -1556,10 +1648,11 @@ function wordHead(e) { return charBubble(`<div class="qword"><span class="w ${e.
 function renderStep() {
   const s = Q.sess;
   clearTimeout(Q.autoT);
-  Q.locked = false; Q.hint = 0; Q.hinted = false;
+  Q.locked = false; Q.hint = 0; Q.hinted = false; Q.extra = 0; Q.match = null;
   hideFb();
   if (s.i >= s.steps.length) { finish(); return; }
   const st = curStep();
+  if (st.k === 'match') { renderMatch(st); return; }
   if (!W.byId.has(st.id)) { s.steps.splice(s.i, 1); save(); renderStep(); return; }
   if (st.k === 'q' && !st.q) { st.q = L.makeQuestion(W, st.id, st.qt, Voice.available()); save(); }
   progress();
@@ -1568,7 +1661,7 @@ function renderStep() {
   if (st.k === 'learn') {
     body.innerHTML = `${tagHTML(st)}<div class="lcard"><div class="idx"><span class="hole"></span><span>DAY ${pad2(e.d)}</span><span>·</span><span>No. ${e.n}</span></div>
       <div class="lword"><span class="w" lang="en">${esc(e.w)}</span><button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button></div>
-      ${sensesHTML(e)}${extrasHTML(e)}</div>`;
+      ${sensesHTML(e, { ex: true })}${extrasHTML(e)}</div>`;
     foot.innerHTML = `<button class="btn" type="button" data-act="next">알겠어요</button>`;
     if (say) Voice.play(e.id);
     return;
@@ -1587,16 +1680,68 @@ function renderStep() {
   } else if (q.t === 'listen') {
     body.innerHTML = `${tagHTML(st)}<p class="qprompt">듣고 뜻을 고르세요</p>${charBubble(`<div style="display:flex;justify-content:center;padding:4px 0 6px"><button class="say big" type="button" data-act="say" data-id="${e.id}" aria-label="다시 듣기">${I.speaker}</button></div>`)}${optsHTML(false)}`;
     setTimeout(() => { if (curStep() === st) Voice.play(e.id); }, 250);
-  } else if (q.t === 'spell') {
-    const sense = e.senses[q.si], letters = e.w.replace(/[^a-zA-Z]/g, '').length;
-    const slots = e.w.split('').map(c => /[a-z]/i.test(c) ? '_' : c === ' ' ? ' ' : c).join(' ');
-    body.innerHTML = `${tagHTML(st)}<p class="qprompt">뜻을 보고 영어로 쓰세요</p>${charBubble(`<p class="qmean">${esc(sense.ko)}</p>`)}
-      <div class="spell"><input id="spellIn" type="text" inputmode="latin" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="${letters}글자" aria-label="영어 단어 입력"><p class="slots" id="slots" aria-hidden="true">${esc(slots)}</p><p class="qhint" id="spellHint" hidden></p></div>`;
-    foot.innerHTML = `<div class="row"><button class="btn alt" type="button" data-act="hint" style="flex:0 0 38%">힌트</button><button class="btn" type="button" data-act="spellGo">확인</button></div>`;
-    setTimeout(() => { const i = $('spellIn'); if (i) i.focus(); }, 60);
+  } else if (q.t === 'cloze') {
+    body.innerHTML = `${tagHTML(st)}<p class="qprompt">빈칸에 들어갈 단어는?</p>${charBubble(sentHTML(q.parts, 'blank'))}${optsHTML(true)}`;
+  } else if (q.t === 'ctx') {
+    body.innerHTML = `${tagHTML(st)}<p class="qprompt">문장 속 이 단어와 뜻이 가장 가까운 것은?</p>${charBubble(sentHTML(q.parts, 'mark'))}${optsHTML(true)}`;
+    if (say) Voice.play(e.id);
+  } else if (q.t === 'spell' || q.t === 'clozet' || q.t === 'dict') {
+    typeUI(st, e, q);
     return;
   }
   foot.innerHTML = '';
+}
+function typeUI(st, e, q) {   // write the word: from the meaning, into the sentence's blank, or from its sound
+  const sense = e.senses[q.si] || e.senses[0], letters = e.w.replace(/[^a-zA-Z]/g, '').length;
+  let prompt, top;
+  if (q.t === 'spell') { prompt = '뜻을 보고 영어로 쓰세요'; top = `<p class="qmean">${esc(sense.ko)}</p>`; }
+  else if (q.t === 'clozet') { prompt = '빈칸에 들어갈 단어를 쓰세요'; top = sentHTML(q.parts, 'blank') + (sense.exKo ? `<p class="qsko">${esc(sense.exKo)}</p>` : ''); }
+  else { prompt = '듣고 단어를 쓰세요'; top = `<div style="display:flex;justify-content:center;padding:4px 0 6px"><button class="say big" type="button" data-act="say" data-id="${e.id}" aria-label="다시 듣기">${I.speaker}</button></div>`; }
+  $('qbody').innerHTML = `${tagHTML(st)}<p class="qprompt">${prompt}</p>${charBubble(top)}
+    <div class="spell"><input id="spellIn" type="text" inputmode="latin" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="${letters}글자" aria-label="영어 단어 입력"><p class="slots" id="slots" aria-hidden="true">${esc(slotText(e.w, q.lead || 0))}</p><p class="qhint" id="spellHint" hidden></p></div>`;
+  $('qfoot').innerHTML = `<div class="row"><button class="btn alt" type="button" data-act="hint" style="flex:0 0 38%">힌트</button><button class="btn" type="button" data-act="spellGo">확인</button></div>`;
+  if (q.t === 'dict') setTimeout(() => { if (curStep() === st) Voice.play(e.id); }, 250);
+  setTimeout(() => { const i = $('spellIn'); if (i) i.focus(); }, 60);
+}
+function renderMatch(st) {   // tap a word, then its meaning
+  st.ids = st.ids.filter(id => W.byId.has(id));
+  if (st.ids.length < 2) { if (Q.sess.kind === 'lesson') L.answerMatch(state, Q.sess, 0); else Q.sess.i++; save(); renderStep(); return; }
+  progress();
+  const right = L.shuffle(st.ids.slice());
+  const ko = e => { const s = e.senses.find(x => x.ko) || e.senses[0]; return s.ko || s.en; };
+  Q.match = { sel: null, done: new Set(), miss: 0 };
+  $('qbody').innerHTML = `${tagHTML(st)}<p class="qprompt">단어와 뜻을 짝지어 보세요</p><div class="match">
+    <div class="mcol">${st.ids.map(id => `<button class="mt en" type="button" data-act="mpick" data-side="w" data-id="${id}" lang="en">${esc(W.byId.get(id).w)}</button>`).join('')}</div>
+    <div class="mcol">${right.map(id => `<button class="mt" type="button" data-act="mpick" data-side="m" data-id="${id}">${esc(ko(W.byId.get(id)))}</button>`).join('')}</div></div>`;
+  $('qfoot').innerHTML = '';
+}
+function mpick(el) {
+  const M = Q && Q.match;
+  if (!M || el.disabled) return;
+  const side = el.dataset.side, id = el.dataset.id;
+  if (side === 'w' && state.settings.say) Voice.play(id);
+  if (!M.sel || M.sel.dataset.side === side) { if (M.sel) M.sel.classList.remove('sel'); M.sel = el; el.classList.add('sel'); return; }
+  const a = M.sel;
+  M.sel = null; a.classList.remove('sel');
+  if (a.dataset.id === id) {
+    for (const b of [a, el]) { b.classList.add('ok'); b.disabled = true; }
+    M.done.add(id); Sound.sfx('right'); vibrate(10);
+    if (M.done.size === curStep().ids.length) setTimeout(matchDone, 350);
+  } else {
+    M.miss++; Sound.sfx('wrong'); vibrate([30, 40, 30]);
+    for (const b of [a, el]) { b.classList.remove('bad'); void b.offsetWidth; b.classList.add('bad'); }
+  }
+}
+function matchDone() {
+  if (!Q || !Q.match) return;
+  const s = Q.sess, miss = Q.match.miss;
+  const res = s.kind === 'lesson' ? L.answerMatch(state, s, miss) : (s.i++, { xp: 0 });
+  Q.match = null;
+  save(); progress();
+  $('fbIn').innerHTML = `<div class="hd"><i>${I.check}</i><span>${miss ? '짝 맞추기 끝!' : '한 번에 다 맞혔어요!'}</span>${res.xp ? `<span class="xp">${I.bolt}+${res.xp} XP</span>` : ''}</div><button class="btn" type="button" data-act="cont">계속</button>`;
+  const fb = $('fb'); fb.classList.remove('bad'); fb.classList.add('show');
+  Sound.sfx('combo');
+  Q.autoT = setTimeout(cont, 1100);
 }
 function pick(i) {
   if (Q.locked) return;
@@ -1610,7 +1755,7 @@ function spellGo() {
   if (Q.locked) return;
   const inp = $('spellIn'); if (!inp) return;
   if (!inp.value.trim()) { inp.focus(); return; }
-  const st = curStep(), e = W.byId.get(st.id), spelled = L.checkSpell(e, inp.value), ok = spelled && Q.hint < 2;
+  const st = curStep(), e = W.byId.get(st.id), spelled = L.checkSpell(e, inp.value), ok = spelled && !Q.extra;
   Q.hinted = spelled && !ok;
   Q.locked = true;
   inp.classList.add(ok ? 'right' : 'wrong');
@@ -1618,15 +1763,13 @@ function spellGo() {
   inp.blur();
   resolve(ok, st);
 }
-function hint() {
-  const st = curStep(), e = W.byId.get(st.id), h = $('spellHint'), slots = $('slots');
-  Q.hint++;
-  if (Q.hint === 1) { h.hidden = false; h.textContent = '동의어: ' + (e.senses[st.q.si].en || e.senses[0].en); }
-  else {
-    let shown = 0;
-    const need = Q.hint - 1;
-    slots.textContent = e.w.split('').map(c => /[a-z]/i.test(c) ? (shown++ < need ? c : '_') : c === ' ' ? ' ' : c).join(' ');
-  }
+function hint() {   // first a free clue (synonyms, or the meaning when listening), then one more letter each time
+  const st = curStep(), q = st.q, e = W.byId.get(st.id), h = $('spellHint'), slots = $('slots');
+  const sense = e.senses[q.si] || e.senses[0];
+  const clue = q.t === 'dict' ? (sense.ko ? '뜻: ' + sense.ko : '') : q.t === 'spell' && sense.en ? '동의어: ' + sense.en : '';
+  if (!Q.hint && clue) { Q.hint = 1; h.hidden = false; h.textContent = clue; return; }
+  Q.hint = 1; Q.extra++;
+  slots.textContent = slotText(e.w, (q.lead || 0) + Q.extra);
 }
 const PRAISE = ['정답이에요!', '좋아요!', '완벽해요!', '잘했어요!', '훌륭해요!'];
 function resolve(ok, st) {
@@ -1646,17 +1789,20 @@ function showFb(ok, st, res) {
   const combo = res.combo >= 3 && ok ? ` <span style="font-size:15px;font-weight:700">${res.combo}연속!</span>` : '';
   const head = `<div class="hd"><i>${ok ? I.check : I.x}</i><span>${ok ? PRAISE[Math.floor(Math.random() * PRAISE.length)] : Q.hinted ? '맞았지만 힌트를 썼어요' : '아쉬워요'}${combo}</span>${res.xp ? `<span class="xp">${I.bolt}+${res.xp} XP</span>` : ''}</div>`;
   let ans = '';
-  if (!ok || q.t === 'listen' || q.t === 'spell') {
-    const right = q.t === 'mcq-ko' || q.t === 'listen' ? e.senses[q.si].ko : q.t === 'syn' ? q.opts[q.a] : e.w;
-    ans = `<div class="ans">${!ok && q.t !== 'spell' && q.t !== 'card' ? `<div>정답: <b>${esc(right)}</b></div>` : ''}<div><span class="w" lang="en">${esc(e.w)}</span> <span class="m">${esc(meaningLine(e))}</span></div></div>`;
+  const typed = q.t === 'spell' || q.t === 'clozet' || q.t === 'dict', inSent = q.t === 'cloze' || q.t === 'clozet' || q.t === 'ctx';
+  if (!ok || typed || inSent || q.t === 'listen') {
+    const right = q.t === 'mcq-ko' || q.t === 'listen' ? e.senses[q.si].ko : q.t === 'syn' || q.t === 'ctx' ? q.opts[q.a] : e.w;
+    const si = q.si != null ? q.si : 0, sense = e.senses[si] || {};
+    const ex = sense.ex && (inSent || !ok) ? `<div class="ex"><p lang="en">${exMarked(e, si)}</p>${sense.exKo ? `<small>${esc(sense.exKo)}</small>` : ''}</div>` : '';
+    ans = `<div class="ans">${!ok && !typed && q.t !== 'card' ? `<div>정답: <b>${esc(right)}</b></div>` : ''}<div><span class="w" lang="en">${esc(e.w)}</span> <span class="m">${esc(meaningLine(e))}</span></div>${ex}</div>`;
   }
   $('fbIn').innerHTML = head + ans + `<button class="btn ${ok ? '' : 'bad'}" type="button" data-act="cont">계속</button>`;
   const fb = $('fb');
   fb.classList.toggle('bad', !ok);
   fb.classList.add('show');
   $('qfoot').innerHTML = '';
-  if ((!ok || q.t === 'listen' || q.t === 'spell' || q.t === 'mcq-en') && state.settings.say) Voice.play(e.id);
-  if (ok) Q.autoT = setTimeout(cont, q.t === 'spell' || q.t === 'listen' || q.t === 'mcq-en' ? 1500 : 1000);
+  if ((!ok || typed || q.t === 'listen' || q.t === 'mcq-en' || q.t === 'cloze') && state.settings.say) Voice.play(e.id);
+  if (ok) Q.autoT = setTimeout(cont, inSent ? 2400 : typed || q.t === 'listen' || q.t === 'mcq-en' ? 1500 : 1000);
 }
 function hideFb() { const fb = $('fb'); if (fb) fb.classList.remove('show', 'bad'); }
 function cont() { if (!Q) return; clearTimeout(Q.autoT); Sound.sfx('next'); renderStep(); }
@@ -1751,7 +1897,7 @@ function faceFront(e) {
 }
 function faceBack(e) {
   return `<div class="idx"><span class="hole"></span><span>DAY ${pad2(e.d)}</span><span>·</span><span>No. ${e.n}</span></div><button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button>
-    <div class="lword" style="padding-right:48px"><span class="w" lang="en">${esc(e.w)}</span></div>${sensesHTML(e)}${extrasHTML(e)}`;
+    <div class="lword" style="padding-right:48px"><span class="w" lang="en">${esc(e.w)}</span></div>${sensesHTML(e, { ex: true })}${extrasHTML(e)}`;
 }
 function stageHTML(e, n) {
   return `<div class="stage" id="stage">${n > 1 ? '<div class="deck d2"></div>' : ''}${n > 0 ? '<div class="deck d1"></div>' : ''}
@@ -1988,7 +2134,7 @@ function tbIds() {
   const r = TB.range === 'days' ? { t: 'days', days: TB.days } : { t: TB.range };
   return L.rangeIds(state, W, r, today());
 }
-const QT = [['mix', '섞어서'], ['mcq-ko', '뜻 고르기'], ['mcq-en', '단어 고르기'], ['syn', '동의어'], ['listen', '듣기'], ['spell', '스펠링']];
+const QT = [['mix', '섞어서'], ['mcq-ko', '뜻 고르기'], ['mcq-en', '단어 고르기'], ['syn', '동의어'], ['cloze', '예문 빈칸'], ['ctx', '문장 속 뜻'], ['listen', '듣기'], ['spell', '한글 보고 쓰기'], ['dict', '받아쓰기']];
 function renderTest() {
   if (!Q) settleSessions();
   TB = TB || tbDefaults();
@@ -2080,7 +2226,7 @@ function renderSettings() {
       <div class="sr"><div class="t"><b>하루 새 단어</b><span class="d">매일 새로 익힐 단어 수 · 5개마다 레슨 1개</span></div>${segHTML('daily', [[5, '5'], [10, '10'], [15, '15'], [20, '20'], [30, '30']])}</div>
       <div class="sr"><div class="t"><b>하루 목표 XP</b><span class="d">연속 학습은 레슨 하나만 해도 이어져요</span></div>${segHTML('goal', [[20, '20'], [50, '50'], [80, '80'], [120, '120']])}</div>
       <div class="sr"><div class="t"><b>복습 방식</b><span class="d">퀴즈로 풀기, 또는 카드로 알아요/몰라요</span></div>${segHTML('review', [['quiz', '퀴즈'], ['card', '카드']])}</div>
-      <div class="sr"><div class="t"><b>스펠링 문제</b><span class="d">잘 아는 단어는 직접 쓰기로 복습</span></div>${swHTML('spell', '스펠링 문제')}</div>
+      <div class="sr"><div class="t"><b>직접 쓰는 문제</b><span class="d">복습 때 한글 보고 쓰기·빈칸 쓰기·받아쓰기도 내기</span></div>${swHTML('spell', '스펠링 문제')}</div>
       <div class="sr"><div class="t"><b>카드 앞면</b><span class="d">카드로 볼 때 먼저 보일 쪽</span></div>${segHTML('front', [['en', '영어'], ['ko', '한국어']])}</div>
       <div class="sr"><div class="t"><b>새 단어 시작 Day</b><span class="d">이미 아는 Day는 건너뛰기</span></div><select data-set="start" aria-label="새 단어 시작 Day">${W.days.map(d => `<option value="${d}" ${d === st.start ? 'selected' : ''}>Day ${pad2(d)}부터</option>`).join('')}</select></div>
     </div>
@@ -2226,6 +2372,7 @@ const ACT = {
   lessonMore: () => startLesson({ more: true }),
   next: () => nextLearn(),
   pick: el => pick(Number(el.dataset.i)),
+  mpick: el => mpick(el),
   cont: () => cont(),
   quit: () => quitRun(),
   hint: () => hint(),
@@ -2315,7 +2462,7 @@ document.addEventListener('keydown', ev => {
       else if (ev.key === 'ArrowRight') cardAnswer(true);
       else if (ev.key === 'ArrowLeft') cardAnswer(false);
     } else if (st.q && st.q.opts && /^[1-4]$/.test(ev.key)) pick(Number(ev.key) - 1);
-    if ((ev.key === 's' || ev.key === 'S') && st.q && st.q.t !== 'mcq-en' && st.q.t !== 'spell') Voice.play(st.id);
+    if ((ev.key === 's' || ev.key === 'S') && st.q && !['mcq-en', 'spell', 'cloze', 'clozet'].includes(st.q.t)) Voice.play(st.id);
     if (ev.key === 'Escape') quitRun();
     return;
   }

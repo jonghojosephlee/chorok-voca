@@ -8,7 +8,8 @@ const Logic = (() => {
   const MASTER = 5;                                 // box at which a word counts as mastered
   const DAYMS = 864e5, SHIFT = 4 * 36e5;            // a study day rolls over at 4am local time
   const LESSON_NEW = 5, LESSON_REV = 5, REVIEW_LESSON = 10;   // a lesson: 5 new words + up to 5 reviews, or 10 reviews
-  const MIX_TYPES = ['mcq-ko', 'mcq-en', 'syn', 'listen', 'spell'];
+  const MIX_TYPES = ['mcq-ko', 'mcq-en', 'syn', 'listen', 'spell', 'cloze', 'ctx', 'dict'];
+  const AUDIO_TYPES = ['listen', 'dict'];
 
   const dayNum = (t = Date.now()) => { const d = new Date(t - SHIFT); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / DAYMS); };
   const dayKey = n => new Date(n * DAYMS).toISOString().slice(0, 10);
@@ -52,7 +53,7 @@ const Logic = (() => {
   }
   function prepare(rows) {
     const words = rows.map((r, i) => {
-      const senses = r[3].map(s => ({ en: s[0] || '', ko: s[1] || '' }));
+      const senses = r[3].map(s => ({ en: s[0] || '', ko: s[1] || '', ex: s[2] || '', exKo: s[3] || '' }));
       const e = { id: r[0] + '-' + r[1], d: r[0], n: r[1], w: r[2], senses, note: r[4] || '', fix: r[5] || '', i };
       e.key = e.w.toLowerCase();
       e.pos = posOf(senses[0].ko || '');
@@ -115,6 +116,43 @@ const Logic = (() => {
     const ds = draw(tiers(W, e, c => !related(c, e)), 3, c => c.w, new Set([e.w]));
     return finish({ t: 'mcq-en', id: e.id, si }, e.w, [e.w, ...ds]);
   }
+  // a sense's example split around the headword: [before, the word as written, after]
+  function splitEx(e, si) {
+    const ex = e.senses[si] && e.senses[si].ex;
+    if (!ex) return null;
+    const m = new RegExp('(^|[^A-Za-z-])(' + e.w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?![A-Za-z-])', 'i').exec(ex);
+    if (!m) return null;
+    const at = m.index + m[1].length;
+    return [ex.slice(0, at), ex.slice(at, at + m[2].length), ex.slice(at + m[2].length)];
+  }
+  function exSense(e) {
+    const ok = e.senses.map((s, i) => (splitEx(e, i) ? i : -1)).filter(i => i >= 0);
+    return ok.length ? pick(ok) : -1;
+  }
+  function qCloze(W, e, typed) {   // fill the blank in the example sentence
+    const si = exSense(e);
+    if (si < 0) return null;
+    const parts = splitEx(e, si);
+    if (typed) return { t: 'clozet', id: e.id, si, parts };
+    const low = e.senses[si].ex.toLowerCase(), size = e.w.split(' ').length;
+    const free = c => !related(c, e) && !low.includes(c.key);
+    const ds = draw(tiers(W, e, c => free(c) && c.w.split(' ').length === size).concat([W.words.filter(free)]), 3, c => c.w, new Set([e.w]));
+    return finish({ t: 'cloze', id: e.id, si, parts }, e.w, [e.w, ...ds]);
+  }
+  function qContext(W, e) {   // TOEFL style: the word in the sentence is closest in meaning to
+    const si = exSense(e);
+    if (si < 0) return null;
+    const low = e.senses[si].ex.toLowerCase();
+    const pool = synonymsOf([e.senses[si]]).filter(s => s !== e.key && shortOpt(s) && !low.includes(s));
+    if (!pool.length) return null;
+    const correct = pick(pool.slice(0, 4));
+    const taken = new Set([e.key, ...e.syn]);
+    const ds = draw(tiers(W, e, c => !related(c, e)), 3, c => {
+      const cand = c.syn.filter(s => !taken.has(s) && s !== c.key && shortOpt(s) && !low.includes(s));
+      return cand.length ? pick(cand) : null;
+    }, taken);
+    return finish({ t: 'ctx', id: e.id, si, parts: splitEx(e, si) }, correct, [correct, ...ds]);
+  }
   function qSynonym(W, e) {
     const pool = e.syn.filter(s => s !== e.key && shortOpt(s));
     if (!pool.length) return null;
@@ -130,13 +168,19 @@ const Logic = (() => {
     const e = W.byId.get(id);
     if (!e) return null;
     if (type === 'listen' && !hasAudio) type = 'mcq-ko';
-    const order = { 'mcq-ko': ['mcq-ko'], listen: ['listen', 'mcq-ko'], 'mcq-en': ['mcq-en', 'mcq-ko'], syn: ['syn', 'mcq-en', 'mcq-ko'], spell: ['spell'], card: ['card'] }[type] || ['mcq-ko'];
+    if (type === 'dict' && !hasAudio) type = 'spell';
+    const order = { 'mcq-ko': ['mcq-ko'], listen: ['listen', 'mcq-ko'], 'mcq-en': ['mcq-en', 'mcq-ko'], syn: ['syn', 'mcq-en', 'mcq-ko'],
+      spell: ['spell'], spell1: ['spell1'], dict: ['dict'], cloze: ['cloze', 'mcq-en', 'mcq-ko'], clozet: ['clozet', 'spell1'],
+      ctx: ['ctx', 'syn', 'mcq-en', 'mcq-ko'], card: ['card'] }[type] || ['mcq-ko'];
     for (const t of order) {
       let q = null;
       if (t === 'mcq-ko' || t === 'listen') q = qMeaning(W, e, t);
       else if (t === 'mcq-en') q = qWord(W, e);
       else if (t === 'syn') q = qSynonym(W, e);
-      else if (t === 'spell') q = { t: 'spell', id, si: senseIndex(e) };
+      else if (t === 'spell' || t === 'spell1') q = { t: 'spell', id, si: senseIndex(e), lead: t === 'spell1' ? 1 : 0 };   // lead: letters shown up front
+      else if (t === 'dict') q = { t: 'dict', id, si: senseIndex(e) };
+      else if (t === 'cloze' || t === 'clozet') q = qCloze(W, e, t === 'clozet');
+      else if (t === 'ctx') q = qContext(W, e);
       else if (t === 'card') q = { t: 'card', id };
       if (q) return q;
     }
@@ -231,12 +275,17 @@ const Logic = (() => {
   function reviewType(box, settings, hasAudio) {
     if (settings.review === 'card') return 'card';
     const r = rand();
-    if (box <= 1) return hasAudio && r < 0.3 ? 'listen' : 'mcq-ko';
-    if (box === 2) return r < 0.5 ? 'mcq-en' : 'syn';
-    if (box <= 4) return r < 0.4 ? 'syn' : r < 0.7 ? 'mcq-en' : (hasAudio ? 'listen' : 'mcq-ko');
-    return settings.spell ? (r < 0.6 ? 'spell' : 'syn') : (r < 0.5 ? 'syn' : 'mcq-en');
+    let t;
+    if (box <= 1) t = r < 0.35 ? 'mcq-ko' : r < 0.6 ? 'mcq-en' : r < 0.8 ? 'cloze' : 'listen';
+    else if (box === 2) t = r < 0.3 ? 'spell1' : r < 0.55 ? 'cloze' : r < 0.8 ? 'ctx' : 'mcq-en';
+    else if (box <= 4) t = r < 0.3 ? 'spell1' : r < 0.55 ? 'ctx' : r < 0.8 ? 'clozet' : 'dict';
+    else t = r < 0.35 ? 'spell' : r < 0.7 ? 'clozet' : 'ctx';
+    if (t === 'listen' && !hasAudio) t = 'mcq-ko';
+    if (t === 'dict' && !hasAudio) t = 'spell1';
+    if (!settings.spell) t = { spell: 'mcq-en', spell1: 'mcq-en', clozet: 'cloze', dict: 'listen' }[t] || t;
+    return t;
   }
-  function retryType(t) { return t === 'spell' ? 'spell' : t === 'card' ? 'card' : t === 'listen' ? 'mcq-ko' : t; }
+  function retryType(t) { return t === 'listen' ? 'mcq-ko' : t; }
   function buildLesson(state, W, T, opts = {}) {
     const s = state.settings, hasAudio = !!opts.hasAudio;
     ensurePlan(state, W, T);
@@ -251,6 +300,8 @@ const Logic = (() => {
     const steps = shuffle(rev.map(id => ntSet.has(id) ? { k: 'q', id, qt: 'mcq-ko', nw: 1 } : { k: 'q', id, qt: reviewType(state.prog[id][0], s, hasAudio) }));
     for (const id of fresh) steps.push({ k: 'learn', id });
     for (const id of shuffle(fresh.slice())) steps.push({ k: 'q', id, qt: 'mcq-ko', nw: 1 });
+    if (fresh.length >= 3) steps.push({ k: 'match', ids: shuffle(fresh.slice()) });
+    else if (!fresh.length && rev.length >= 4) steps.push({ k: 'match', ids: shuffle(rev.slice()).slice(0, 5) });
     const d = state.days[dayKey(T)];
     return {
       kind: 'lesson', v: 3, T, no: ((d && d.lessons) || 0) + 1, created: Date.now(), steps, i: 0, base: steps.length, fin: 0,
@@ -266,7 +317,7 @@ const Logic = (() => {
     const st = L.steps[L.i];
     const res = { xp: 0, first: false, combo: L.stat.combo, retry: false, done: false };
     if (!st) return res;
-    if (st.k === 'learn') { L.i++; L.fin = (L.fin || 0) + 1; return res; }
+    if (st.k === 'learn' || st.k === 'match') { L.i++; L.fin = (L.fin || 0) + 1; return res; }
     const id = st.id, T = L.T;
     const first = !L.seen[id];
     L.seen[id] = (L.seen[id] || 0) + 1;
@@ -293,7 +344,8 @@ const Logic = (() => {
       if (!st.r) {   // asked once more at the end of the lesson
         const again = { k: 'q', id, qt: retryType(st.qt), r: 1 };
         if (st.nw) again.nw = 1;
-        L.steps.push(again);
+        const last = L.steps.length - 1, beforeMatch = L.steps[last].k === 'match' && L.i < last;   // retries come before the pairs round
+        L.steps.splice(beforeMatch ? last : L.steps.length, 0, again);
         res.retry = true;
       }
     }
@@ -308,6 +360,15 @@ const Logic = (() => {
     res.combo = L.stat.combo;
     L.i++;
     return res;
+  }
+  function answerMatch(state, L, misses) {   // the pairs round: practice only, the schedule does not change
+    const st = L.steps[L.i];
+    if (!st || st.k !== 'match') return { xp: 0 };
+    const xp = Math.max(1, st.ids.length - misses);
+    addXp(state, dayStats(state, L.T), xp);
+    L.stat.xp += xp;
+    L.i++; L.fin = (L.fin || 0) + 1;
+    return { xp };
   }
   function finishLesson(state, W, L) {
     const T = L.T, ds = dayStats(state, T), bonus = 10;
@@ -333,7 +394,7 @@ const Logic = (() => {
     let ids = rangeIds(state, W, spec.range, T);
     ids = spec.range.t === 'ids' ? ids.slice() : shuffle(ids.slice());
     if (spec.count && spec.count < ids.length) ids = ids.slice(0, spec.count);
-    const steps = ids.map(id => ({ k: 'q', id, qt: spec.qt === 'mix' ? pick(spec.hasAudio ? MIX_TYPES : MIX_TYPES.filter(t => t !== 'listen')) : spec.qt }));
+    const steps = ids.map(id => ({ k: 'q', id, qt: spec.qt === 'mix' ? pick(spec.hasAudio ? MIX_TYPES : MIX_TYPES.filter(t => !AUDIO_TYPES.includes(t))) : spec.qt }));
     return { kind: 'test', T, created: Date.now(), spec, steps, i: 0, answers: [], stat: { ok: 0, n: 0, xp: 0, combo: 0, maxCombo: 0, ms: 0 } };
   }
   function answerTest(state, X, correct) {
@@ -372,10 +433,10 @@ const Logic = (() => {
 
   return {
     INTERVAL, MAXBOX, MASTER, MIX_TYPES, LESSON_NEW, LESSON_REV, REVIEW_LESSON, dayNum, dayKey, seed, shuffle, pick,
-    stems, posOf, synonymsOf, prepare, related, makeQuestion, checkSpell, normSpell,
+    stems, posOf, synonymsOf, prepare, related, makeQuestion, splitEx, checkSpell, normSpell,
     defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, addXp, streak, touchBest,
     pickNew, ensurePlan, refreshPlan, todayPlan, statusOf,
-    buildLesson, lessonUnits, answerLesson, finishLesson,
+    buildLesson, lessonUnits, answerLesson, answerMatch, finishLesson,
     rangeIds, buildTest, answerTest, finishTest, clearWrong,
   };
 })();

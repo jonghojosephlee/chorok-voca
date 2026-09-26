@@ -491,3 +491,30 @@ select{font-size:16px;font-weight:800;padding:9px 12px;border-radius:12px;border
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+/* today's plan */
+.plan-h{display:flex;align-items:baseline;justify-content:space-between;margin:2px 2px -4px;font-size:15px;font-weight:900}
+.plan-h span{font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.plan{display:flex;flex-direction:column;gap:8px}
+.plan li{display:flex;align-items:center;gap:11px;padding:11px 13px;border:2px solid var(--line);border-radius:15px;font-size:16px;font-weight:800;color:var(--ink-2)}
+.plan li i{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--surface-3);color:var(--ink-2);font-style:normal;font-size:14px;font-weight:900}
+.plan li i svg{width:16px;height:16px}
+.plan li.next{border-color:var(--green);background:var(--green-soft);color:var(--ink)}
+.plan li.next i{background:var(--green-btn);color:#fff}
+.plan li.done{color:var(--ink-3)}
+.plan li.done span{text-decoration:line-through;text-decoration-thickness:2px}
+.plan li.done i{background:var(--green-btn);color:#fff}
+details.more{border-top:2px dashed var(--line);padding-top:10px}
+details.more summary{cursor:pointer;list-style:none;text-align:center;font-size:15px;font-weight:800;color:var(--ink-2);padding:4px}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::after{content:" ▾"}
+details.more[open] summary::after{content:" ▴"}
+.more-in{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.overall{display:flex;flex-direction:column;gap:7px;padding:0 4px}
+.overall-t{display:flex;justify-content:space-between;gap:10px;font-size:14px;font-weight:800;color:var(--ink-2)}
+.overall-t b{color:var(--ink);font-variant-numeric:tabular-nums}
+.overall .bar{height:10px}
+/* first time a question format shows up */
+.qnew{align-self:stretch;font-size:14.5px;font-weight:700;line-height:1.45;color:var(--ink);background:var(--blue-soft);border-radius:14px;padding:9px 13px}
+.qnew b{display:block;font-size:12.5px;font-weight:900;color:var(--blue);letter-spacing:.02em;margin-bottom:1px}
+.overall .bar i{background:var(--green)}

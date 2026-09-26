@@ -191,7 +191,7 @@ const Logic = (() => {
 
   /* ---------- state ---------- */
   function defaultSettings() {
-    return { daily: 10, goal: 50, start: 1, review: 'quiz', spell: true, sfx: true, say: true, silent: true, koSay: false, repeat: 2, front: 'en', theme: 'system' };
+    return { daily: 10, lessons: 3, goal: 50, start: 1, review: 'quiz', spell: true, sfx: true, say: true, silent: true, koSay: false, repeat: 2, front: 'en', theme: 'system' };
   }
   function newState() {
     return { v: 2, prog: {}, stars: {}, wrong: {}, days: {}, tests: [], nt: null, best: 0, xpTotal: 0, settings: defaultSettings(), session: null, spots: {} };
@@ -204,7 +204,8 @@ const Logic = (() => {
       if (Array.isArray(v) && v.length >= 5 && (!W || W.byId.has(k))) prog[k] = v.slice(0, 5).map(Number);
     }
     out.prog = prog;
-    for (const key of ['stars', 'wrong', 'days', 'spots']) if (!out[key] || typeof out[key] !== 'object' || Array.isArray(out[key])) out[key] = {};
+    for (const key of ['stars', 'wrong', 'days', 'spots', 'seenTypes']) if (!out[key] || typeof out[key] !== 'object' || Array.isArray(out[key])) out[key] = {};
+    if (out.today && (typeof out.today.d !== 'number' || !Array.isArray(out.today.steps))) out.today = null;
     if (!Array.isArray(out.tests)) out.tests = [];
     // a half-done lesson from before short lessons is dropped; its answers are already in prog
     if (out.lesson && out.lesson.v !== 3 && out.lesson.i < (out.lesson.steps || []).length) out.lesson = null;
@@ -266,6 +267,46 @@ const Logic = (() => {
     const newLeft = planned.filter(id => !state.prog[id] || state.prog[id][1] <= T);
     return { T, planned, rev, newLeft: newLeft.length, newIds: newLeft };
   }
+  // Today's plan: a fixed list of short lessons, made once a day. Due reviews come first and new words only get the lessons
+  // that are left, so a review backlog slows new words down (the Anki manual's advice) and whatever does not fit waits for tomorrow.
+  function dayPlan(state, W, T) {
+    if (state.today && state.today.d === T) return state.today;
+    ensurePlan(state, W, T);
+    const ntSet = new Set(state.nt.ids);
+    let R = 0;
+    for (const e of W.words) { const p = state.prog[e.id]; if (p && p[1] <= T && !ntSet.has(e.id)) R++; }
+    R += state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T).length;
+    const cap = Math.max(1, state.settings.lessons || 3);
+    const fresh = state.nt.ids.filter(id => !state.prog[id]);
+    const lessonsFor = n => n + Math.ceil(Math.max(0, R - n * LESSON_REV) / REVIEW_LESSON);
+    let nNew = Math.ceil(fresh.length / LESSON_NEW);
+    const floor = Math.min(nNew, cap, Math.ceil((state.settings.minNew || 0) / LESSON_NEW));   // new words kept even with a backlog
+    while (nNew > floor && lessonsFor(nNew) > cap) nNew--;
+    const nRev = Math.min(cap - nNew, Math.ceil(Math.max(0, R - nNew * LESSON_REV) / REVIEW_LESSON));
+    state.nt.ids = state.nt.ids.filter(id => state.prog[id]).concat(fresh.slice(0, nNew * LESSON_NEW));   // the rest wait for another day
+    const d = state.days[dayKey(T)];
+    state.today = { d: T, steps: Array(nRev).fill('rev').concat(Array(nNew).fill('new')), base: (d && d.lessons) || 0, cut: fresh.length - nNew * LESSON_NEW };
+    return state.today;
+  }
+  function planStatus(state, W, T) {   // the plan's steps with what each will hold now; done steps first
+    const P = dayPlan(state, W, T), d = state.days[dayKey(T)];
+    const done = Math.max(0, ((d && d.lessons) || 0) - P.base);
+    let fresh = state.nt.ids.filter(id => !state.prog[id]).length;
+    let rev = todayPlan(state, W, T).rev + state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T).length;
+    const steps = [];
+    P.steps.forEach((kind, i) => {
+      if (i < done) { steps.push({ kind, done: true }); return; }
+      let k = kind;
+      if (k === 'rev' && !rev && fresh) k = 'new';
+      if (k === 'new' && !fresh) k = 'rev';
+      const nNew = k === 'new' ? Math.min(LESSON_NEW, fresh) : 0, nRev = Math.min(k === 'new' ? LESSON_REV : REVIEW_LESSON, rev);
+      if (!nNew && !nRev) return;
+      fresh -= nNew; rev -= nRev;
+      steps.push({ kind: k, nNew, nRev, done: false });
+    });
+    const next = steps.findIndex(x => !x.done);
+    return { steps, next, finished: next < 0, extra: done > P.steps.length ? done - P.steps.length : 0, left: { rev, fresh }, cut: P.cut };
+  }
   function statusOf(state, id) {
     const p = state.prog[id];
     return !p ? 'new' : p[0] >= MASTER ? 'master' : 'learn';
@@ -291,7 +332,7 @@ const Logic = (() => {
     ensurePlan(state, W, T);
     if (opts.extra) state.nt.ids = state.nt.ids.concat(pickNew(state, W, opts.extra, new Set(state.nt.ids)));
     const ntSet = new Set(state.nt.ids);
-    const fresh = state.nt.ids.filter(id => !state.prog[id]).slice(0, LESSON_NEW);
+    const fresh = opts.kind === 'rev' ? [] : state.nt.ids.filter(id => !state.prog[id]).slice(0, LESSON_NEW);
     const pendingNew = state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T);   // missed in a lesson left unfinished
     const due = W.words.filter(e => { const p = state.prog[e.id]; return p && p[1] <= T && !ntSet.has(e.id); })
       .sort((a, b) => state.prog[a.id][1] - state.prog[b.id][1] || state.prog[a.id][0] - state.prog[b.id][0] || a.i - b.i)
@@ -435,7 +476,7 @@ const Logic = (() => {
     INTERVAL, MAXBOX, MASTER, MIX_TYPES, LESSON_NEW, LESSON_REV, REVIEW_LESSON, dayNum, dayKey, seed, shuffle, pick,
     stems, posOf, synonymsOf, prepare, related, makeQuestion, splitEx, checkSpell, normSpell,
     defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, addXp, streak, touchBest,
-    pickNew, ensurePlan, refreshPlan, todayPlan, statusOf,
+    pickNew, ensurePlan, refreshPlan, todayPlan, dayPlan, planStatus, statusOf,
     buildLesson, lessonUnits, answerLesson, answerMatch, finishLesson,
     rangeIds, buildTest, answerTest, finishTest, clearWrong,
   };

@@ -505,90 +505,59 @@ function dayCounts(d) {
   for (const e of ws) { const p = state.prog[e.id]; if (p) { if (p[0] >= L.MASTER) m++; else l++; } }
   return { n: ws.length, m, l };
 }
+function stepLabel(x) { return x.kind === 'new' ? `새 단어 ${x.nNew}개${x.nRev ? ` + 복습 ${x.nRev}개` : ''}` : `복습 ${x.nRev}문제`; }
 function renderHome() {
   if (!Q) settleSessions();
-  const T = today(), s = state, st = s.settings;
+  const T = today(), s = state;
   if (s.lesson && !sessionActive(s.lesson, T)) s.lesson = null;
-  const plan = L.todayPlan(s, W, T), ds = s.days[L.dayKey(T)] || { xp: 0 };
-  const xp = ds.xp || 0, goal = st.goal, met = L.dayMet(s, L.dayKey(T)), streak = L.streak(s, T);
+  const ps = L.planStatus(s, W, T), streak = L.streak(s, T), met = L.dayMet(s, L.dayKey(T));
   const dateLabel = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date(T * 864e5));
-  const lesson = s.lesson, doneL = ds.lessons || 0, goalL = Math.max(1, Math.ceil(st.daily / L.LESSON_NEW));
-  let cta, say, mood = 'idle';
+  const lesson = s.lesson, total = ps.steps.length, doneN = ps.steps.filter(x => x.done).length, nx = ps.steps[ps.next];
+  let tomorrow = 0;
+  for (const e of W.words) { const p = s.prog[e.id]; if (p && p[1] <= T + 1) tomorrow++; }
+  let say, cta = '', mood = 'idle';
   if (lesson) {
     const u = L.lessonUnits(lesson);
-    cta = `<button class="btn" type="button" data-act="lesson">${I.play}이어서 하기 · ${u.done}/${u.total}</button>`;
     say = `하던 레슨이 있어요!<small>${u.done}/${u.total}까지 했어요. 그 문제부터 이어서 해요.</small>`;
-  } else if (plan.newLeft > 0) {
-    const first = W.byId.get(plan.newIds[0]), nRev = Math.min(L.LESSON_REV, plan.rev);
-    cta = `<button class="btn" type="button" data-act="lesson">${I.play}레슨 ${doneL < goalL ? `${doneL + 1}/${goalL}` : doneL + 1} 시작</button>`;
-    say = (doneL ? `좋아요! 오늘 레슨 ${doneL}개 했어요.` : streak ? `${streak}일 연속 학습 중! 레슨 하나면 오늘도 이어져요.` : `오늘은 짧은 레슨 ${goalL}개예요!`) +
-      `<small>이번 레슨: 새 단어 ${Math.min(L.LESSON_NEW, plan.newLeft)}개${nRev ? ` + 복습 ${nRev}개` : ''} · <span lang="en">${esc(first.w)}</span>부터 · Day ${pad2(first.d)}</small>`;
-  } else if (plan.rev > 0) {
-    cta = `<button class="btn" type="button" data-act="lesson">${I.play}복습 레슨 시작 · ${Math.min(L.REVIEW_LESSON, plan.rev)}문제</button>`;
-    say = `오늘 새 단어는 다 했어요! 복습이 ${plan.rev}개 남았어요.<small>${plan.rev <= L.REVIEW_LESSON ? '레슨 하나면 끝나요.' : `한 번에 ${L.REVIEW_LESSON}문제씩, 하고 싶은 만큼만 해요.`}</small>`;
-    if (doneL) mood = 'happy';
+    cta = `<button class="btn" type="button" data-act="lesson">${I.play}이어서 하기</button>`;
+  } else if (!total) {
+    say = `오늘은 할 게 없어요.<small>복습할 단어도, 남은 새 단어도 없어요.</small>`; mood = 'happy';
+  } else if (!ps.finished) {
+    const cutNote = ps.cut > 0 && !doneN ? `<small>복습이 밀려 있어서 오늘은 새 단어를 ${ps.cut}개 줄였어요.</small>` : '';
+    say = (doneN ? `좋아요! ${doneN}/${total} 했어요.` : streak ? `${streak}일 연속 학습 중! 오늘은 레슨 ${total}개예요.` : `오늘은 레슨 ${total}개예요. 하나씩 해 봐요!`) + (cutNote || `<small>다음: ${stepLabel(nx)}</small>`);
+    cta = `<button class="btn" type="button" data-act="planNext">${I.play}${ps.next + 1}단계 시작</button>`;
   } else {
-    cta = `<button class="btn gold" type="button" data-act="lessonExtra">${I.bolt}새 단어 ${L.LESSON_NEW}개 더 하기</button>`;
-    say = `오늘 학습 끝! 정말 잘했어요.<small>${xp >= goal ? '오늘 목표 XP도 채웠어요' : '더 하고 싶으면 새 단어를 추가해요'}</small>`;
-    mood = 'happy';
+    say = `오늘 학습 끝! 정말 잘했어요.<small>${tomorrow ? `내일은 복습 ${tomorrow}개부터 시작해요.` : '내일 또 만나요.'}</small>`; mood = 'happy';
   }
-  const labels = ['일', '월', '화', '수', '목', '금', '토'];
-  let week = '';
-  for (let t = T - 6; t <= T; t++) {
-    const k = L.dayKey(t), d = s.days[k], cls = L.dayMet(s, k) ? 'done' : d && d.xp ? 'part' : '';
-    week += `<div class="wk ${cls}${t === T ? ' today' : ''}"><i>${I.flame}</i><span>${labels[new Date(t * 864e5).getUTCDay()]}</span></div>`;
-  }
-  const stars = Object.keys(s.stars).filter(id => W.byId.has(id)).length, wrong = Object.keys(s.wrong).filter(id => W.byId.has(id)).length;
-  const curId = plan.newIds[0] || L.pickNew(s, W, 1)[0], cur = curId ? W.byId.get(curId).d : null;
-  const offs = [0, 46, 70, 46, 0, -46, -70, -46];
-  let path = '';
-  W.days.forEach((d, i) => {
-    const [uc, ud] = unitOf(d);
-    if ((d - 1) % 5 === 0) {
-      const group = W.days.filter(x => x >= d && x < d + 5);
-      let n = 0, seen = 0;
-      for (const x of group) { const c = dayCounts(x); n += c.n; seen += c.m + c.l; }
-      path += `<div class="unit" style="background:${uc};--ud:${ud}"><div><b>유닛 ${Math.floor((d - 1) / 5) + 1}</b><strong>Day ${pad2(group[0])}–${pad2(group[group.length - 1])}</strong></div><span>${seen} / ${n}단어</span></div>`;
-    }
-    const c = dayCounts(d), full = c.m + c.l === c.n, isCur = d === cur && !full;
-    const cls = full ? 'full' : isCur ? 'cur' : c.m + c.l ? 'on' : 'todo';
-    path += `<div class="pnode ${cls}" style="--x:${offs[i % 8]}px;--uc:${uc};--ud:${ud}">
-      ${isCur ? `<button class="startpop" type="button" data-act="lesson">${lesson ? '이어서' : '시작'}</button>` : ''}
-      <button class="nb" type="button" data-act="day" data-day="${d}" aria-label="Day ${d}, ${c.n}단어 중 ${c.m + c.l}개 학습">${ring(96, 7, [{ v: c.m / c.n, c: 'var(--gold)' }, { v: c.l / c.n, c: uc }]).replace('<svg ', '<svg class="ring" ')}<i>${full ? I.check : pad2(d)}</i></button>
-      <small>Day ${pad2(d)} · ${c.m + c.l}/${c.n}</small></div>`;
-  });
+  const steps = ps.steps.map((x, i) => `<li class="${x.done ? 'done' : i === ps.next ? 'next' : ''}"><i>${x.done ? I.check : i + 1}</i><span>${x.done ? (x.kind === 'new' ? '새 단어 레슨' : '복습 레슨') : stepLabel(x)}</span></li>`).join('');
+  const more = ps.finished && !lesson ? `<details class="more"><summary>더 공부하기</summary><div class="more-in">
+      ${ps.left.rev ? `<button class="btn alt" type="button" data-act="lessonRev">복습 더 하기 · ${ps.left.rev}개 남음</button>` : ''}
+      <button class="btn alt" type="button" data-act="lessonExtra">새 단어 ${L.LESSON_NEW}개 더</button>
+      <button class="btn alt" type="button" data-act="tab" data-tab="words">오답노트 · 즐겨찾기 · 듣기 모드</button></div></details>` : '';
+  const learned = Object.keys(s.prog).filter(id => W.byId.has(id)).length, pct = Math.round(learned / W.words.length * 100);
+  const curId = (s.nt && s.nt.ids.find(id => !s.prog[id])) || L.pickNew(s, W, 1)[0], cur = curId ? W.byId.get(curId).d : null;
   const install = PWA && !standalone && isIOS ? `<div class="banner">${I.share}<span><b>앱처럼 쓰려면</b> 공유 버튼 → ‘홈 화면에 추가’를 누르고 홈 화면 아이콘으로 여세요.</span></div>` : '';
   $('s-home').innerHTML = `<div class="wrap">
     <div class="topbar"><div class="brand">${mascot('idle')}<span>초록 보카</span></div>
-      <div class="tstats"><span class="tchip flame ${met ? 'on' : ''}" title="연속 학습 ${streak}일">${streak ? I.flame : I.flameOff}${streak}</span><span class="tchip xp" title="오늘 XP">${I.bolt}${fmt(xp)}</span><button class="ibtn" type="button" data-act="settings" aria-label="설정">${I.gear}</button></div></div>
+      <div class="tstats"><span class="tchip flame ${met ? 'on' : ''}" title="연속 학습 ${streak}일">${streak ? I.flame : I.flameOff}${streak}</span><button class="ibtn" type="button" data-act="settings" aria-label="설정">${I.gear}</button></div></div>
     ${install}
     <p class="eyebrow" style="margin:-6px 4px -4px">${esc(dateLabel)}</p>
     <div class="card hero">
       <div class="charrow">${mascot(mood, 'float')}<div class="bubble">${say}</div></div>
-      <div class="goal"><div class="goal-top"><span>오늘의 목표</span><b>${I.bolt}${fmt(xp)} / ${goal} XP</b></div><div class="bar" role="progressbar" aria-label="오늘 목표" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${xp}"><i style="width:${Math.min(100, xp / goal * 100)}%"></i></div></div>
-      <div class="counts"><div class="count rev"><b>${plan.rev}</b><span>복습할 단어</span></div><div class="count new"><b>${plan.newLeft}</b><span>새 단어</span></div></div>
-      ${cta}
+      ${total ? `<div class="plan-h"><b>오늘의 학습</b><span>${doneN} / ${total}</span></div><ol class="plan">${steps}</ol>` : ''}
+      ${cta}${more}
     </div>
-    <div class="card week" aria-label="최근 7일">${week}</div>
-    <div class="quick">
-      <button class="qk" type="button" data-act="wrongList"><i class="i-red">${I.note}</i><span><b>오답노트</b><small>${wrong}단어</small></span></button>
-      <button class="qk" type="button" data-act="starList"><i class="i-gold">${I.star}</i><span><b>즐겨찾기</b><small>${stars}단어</small></span></button>
-      <button class="qk" type="button" data-act="autoToday"><i class="i-blue">${I.headphones}</i><span><b>듣기 모드</b><small>오늘 단어 자동 재생</small></span></button>
-      <button class="qk" type="button" data-act="tab" data-tab="test"><i class="i-purple">${I.quiz}</i><span><b>테스트</b><small>범위 골라 시험</small></span></button>
-    </div>
-    <div class="sec"><h2>학습 경로</h2><span>총 ${fmt(W.words.length)}단어 · Day ${W.days.length}개</span></div>
-    <div class="path">${path}</div>
-    <div class="legend"><span><i style="background:var(--gold)"></i>암기 완료</span><span><i style="background:var(--green)"></i>학습 중</span><span><i style="background:var(--surface-3)"></i>아직</span></div>
+    <div class="overall"><div class="overall-t"><span>전체 진도${cur ? ` · 지금 Day ${pad2(cur)}` : ''}</span><b>${fmt(learned)} / ${fmt(W.words.length)}단어 · ${pct}%</b></div><div class="bar" role="progressbar" aria-label="전체 진도" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div></div>
   </div>`;
   if (!s.onboarded) setTimeout(onboard, 350);
 }
 async function onboard() {
   if (state.onboarded || screen !== 'home') return;
-  const v = await sheet(`${mascot('happy', 'hop')}<h3>안녕하세요! 저는 초록이예요</h3><p>하루에 새 단어 몇 개씩 해볼까요? 5개씩 짧은 레슨으로 나누고, 복습은 제가 알아서 섞어 드릴게요. 레슨 하나만 해도 연속 학습이 이어져요.</p>
+  const v = await sheet(`${mascot('happy', 'hop')}<h3>안녕하세요! 저는 초록이예요</h3><p>하루에 새 단어는 최대 몇 개까지 할까요? 매일 '오늘의 학습'에 짧은 레슨 몇 개를 정해 드려요. 복습이 먼저고, 복습이 밀리면 새 단어를 줄여요.</p>
     <div class="seg" id="obSeg">${[5, 10, 15, 20].map(n => `<button type="button" data-act="obPick" data-v="${n}" aria-pressed="${n === state.settings.daily}">${n}개</button>`).join('')}</div>
     <button class="btn" type="button" data-act="sheet" data-v="go">시작하기</button>`);
   state.onboarded = true;
-  L.refreshPlan(state, W, today());
+  L.refreshPlan(state, W, today()); state.today = null;
   save();
   renderHome();
   if (v === 'go') startLesson();
@@ -598,9 +567,10 @@ async function onboard() {
 let Q = null;
 function startLesson(opts = {}) {
   const T = today();
+  if (!opts.kind && !opts.extra) { const ps = L.planStatus(state, W, T), x = ps.steps[ps.next]; if (x) opts.kind = x.kind; }
   let s = state.lesson;
   if (opts.extra || opts.more || !sessionActive(s, T)) {
-    s = L.buildLesson(state, W, T, { hasAudio: Voice.available(), extra: opts.extra || 0 });
+    s = L.buildLesson(state, W, T, { hasAudio: Voice.available(), extra: opts.extra || 0, kind: opts.kind });
     if (!s.steps.length) { save(); toast('오늘 할 카드가 없어요. 새 단어를 더 해볼까요?'); go('home'); return; }
     state.lesson = s;
     save();
@@ -636,12 +606,26 @@ function progress() {
   el.innerHTML = `${I.flame}${combo}`;
 }
 function tagHTML(st) {
+  return tagOnly(st) + introHTML(st.k === 'match' ? 'match' : st.q ? st.q.t : '');
+}
+function tagOnly(st) {
   if (Q.sess.kind === 'test') return `<span class="qtag test">${esc(Q.sess.spec.label || '테스트')} · ${Q.sess.i + 1}/${Q.sess.steps.length}</span>`;
   if (st.k === 'match') return '<span class="qtag">짝 맞추기</span>';
   if (st.r) return '<span class="qtag again">다시 풀기</span>';
   if (st.k === 'learn') return '<span class="qtag">새 단어</span>';
   if (st.nw) return '<span class="qtag">새 단어 확인</span>';
   return '<span class="qtag rev">복습</span>';
+}
+const INTRO = {
+  'mcq-ko': '영어 단어를 보고 알맞은 뜻을 골라요', 'mcq-en': '한글 뜻을 보고 알맞은 영어 단어를 골라요', syn: '뜻이 가장 가까운 영어 단어(동의어)를 골라요',
+  listen: '발음을 듣고 뜻을 골라요. 스피커를 누르면 다시 들려요', spell: "한글 뜻을 보고 영어 단어를 직접 써요. 막히면 '힌트'를 눌러요",
+  dict: "발음을 듣고 들리는 단어를 써요. 막히면 '힌트'를 눌러요", cloze: '예문의 빈칸에 들어갈 단어를 골라요', clozet: '예문의 빈칸에 들어갈 단어를 직접 써요. 아래 해석이 힌트예요',
+  ctx: '토플 문제처럼, 문장 속 표시된 단어와 뜻이 가장 가까운 것을 골라요', match: '왼쪽 단어와 오른쪽 뜻을 하나씩 눌러 짝을 맞춰요', card: '카드를 뒤집어 보고, 알았는지 스스로 골라요',
+};
+function introHTML(t) {   // shown once per format
+  if (!INTRO[t] || state.seenTypes[t]) return '';
+  state.seenTypes[t] = 1; save();
+  return `<p class="qnew"><b>처음 보는 문제</b>${esc(INTRO[t])}</p>`;
 }
 function wordHead(e) { return charBubble(`<div class="qword"><span class="w ${e.w.length > 13 ? 'long' : ''}" lang="en">${esc(e.w)}</span><button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button></div>`); }
 function renderStep() {
@@ -843,24 +827,21 @@ function finish() {
 function renderLessonResult(s, r) {
   const T = s.T, streak = L.streak(state, T), ds = state.days[L.dayKey(T)] || { xp: 0 };
   const acc = s.stat.firstN ? Math.round(s.stat.firstOk / s.stat.firstN * 100) : 100;
-  const failed = Object.keys(s.failed);
-  const plan = r.plan, goal = state.settings.goal, more = plan.rev + plan.newLeft;
-  const doneL = ds.lessons || 0, goalL = Math.max(1, Math.ceil(state.settings.daily / L.LESSON_NEW));
-  const next = plan.newLeft ? `다음 레슨 · 새 단어 ${Math.min(L.LESSON_NEW, plan.newLeft)}개` : `복습 레슨 · ${Math.min(L.REVIEW_LESSON, plan.rev)}문제`;
+  const failed = Object.keys(s.failed), ps = L.planStatus(state, W, T), total = ps.steps.length, doneN = ps.steps.filter(x => x.done).length, nx = ps.steps[ps.next];
   const summary = [s.newIds.length ? `새 단어 ${s.newIds.length}개` : '', s.revIds.length ? `복습 ${s.revIds.length}개` : ''].filter(Boolean).join(' · ') || '레슨을 마쳤어요';
+  const title = !ps.finished ? `${doneN}단계 완료!` : ps.extra ? '추가 레슨 완료!' : '오늘의 학습 끝!';
   $('s-result').innerHTML = `<div class="wrap result">
     ${mascot('happy', 'hop')}
-    <h1>${more ? `레슨 ${s.no || doneL} 완료!` : '오늘의 학습 완료!'}</h1>
-    <p class="muted">${summary}${plan.newLeft && doneL < goalL ? ` · 오늘 레슨 ${doneL}/${goalL}` : ''}</p>
+    <h1>${title}</h1>
+    <p class="muted">${summary}${total ? ` · 오늘 ${Math.min(doneN, total)}/${total}` : ''}</p>
     <div class="rstats">
       <div class="rs gold"><small>획득 XP</small><b>${I.bolt}<span id="rxp">0</span></b></div>
       <div class="rs green"><small>정확도</small><b>${acc}%</b></div>
       <div class="rs blue"><small>시간</small><b>${mmss(s.stat.ms)}</b></div>
     </div>
-    <div class="streakbig">${streak ? I.flame : I.flameOff}<span><b>${streak ? streak + '일 연속 학습!' : '오늘 목표까지 조금 남았어요'}</b><small>오늘 ${fmt(ds.xp)} / ${goal} XP${ds.xp >= goal ? ' · 목표 달성' : ''}</small></span></div>
-    ${more ? `<button class="btn" type="button" data-act="lessonMore">${I.play}${next}</button>
-    <button class="btn alt" type="button" data-act="tab" data-tab="home">오늘은 여기까지</button>` : `<button class="btn" type="button" data-act="tab" data-tab="home">계속</button>
-    <button class="btn alt" type="button" data-act="lessonExtra">새 단어 ${L.LESSON_NEW}개 더</button>`}
+    <div class="streakbig">${streak ? I.flame : I.flameOff}<span><b>${streak ? streak + '일 연속 학습!' : '오늘도 해냈어요'}</b><small>오늘 ${fmt(ds.xp)} XP</small></span></div>
+    ${!ps.finished ? `<button class="btn" type="button" data-act="planNext">${I.play}${ps.next + 1}단계 · ${stepLabel(nx)}</button>
+    <button class="btn alt" type="button" data-act="tab" data-tab="home">오늘은 여기까지</button>` : `<button class="btn" type="button" data-act="tab" data-tab="home">홈으로</button>`}
     ${failed.length ? `<div class="sec" style="width:100%"><h2>틀린 단어</h2><span>${failed.length}개 · 내일 다시 나와요</span></div><ul class="panel wlist">${failed.map(id => rowHTML(W.byId.get(id))).join('')}</ul>
     <button class="btn alt" type="button" data-act="browseIds" data-ids="${failed.join(',')}" data-label="틀린 단어">틀린 단어 카드로 보기</button>` : ''}
   </div>`;
@@ -1089,6 +1070,7 @@ function renderWords() {
       $('wbody').innerHTML = `<div class="panel list" style="margin-bottom:16px">
         <button class="li" type="button" data-act="starList"><span class="ic i-gold">${I.star}</span><span class="t"><b>즐겨찾기</b><small>${stars}단어</small></span>${I.chev.replace('<svg', '<svg class="go"')}</button>
         <button class="li" type="button" data-act="wrongList"><span class="ic i-red">${I.note}</span><span class="t"><b>오답노트</b><small>${wrong}단어 · 틀린 횟수 순</small></span>${I.chev.replace('<svg', '<svg class="go"')}</button>
+        <button class="li" type="button" data-act="autoToday"><span class="ic i-blue">${I.headphones}</span><span class="t"><b>듣기 모드</b><small>오늘 단어 자동 재생</small></span>${I.chev.replace('<svg', '<svg class="go"')}</button>
       </div><div class="panel list">${dayRows}</div>`;
     }
   };
@@ -1222,7 +1204,8 @@ function renderSettings() {
     <div class="topbar"><button class="ibtn" type="button" data-act="back" aria-label="뒤로">${I.back}</button><h1 style="flex:1">설정</h1></div>
     <p class="set-h">학습</p>
     <div class="panel set">
-      <div class="sr"><div class="t"><b>하루 새 단어</b><span class="d">매일 새로 익힐 단어 수 · 5개마다 레슨 1개</span></div>${segHTML('daily', [[5, '5'], [10, '10'], [15, '15'], [20, '20'], [30, '30']])}</div>
+      <div class="sr"><div class="t"><b>하루 레슨 수</b><span class="d">'오늘의 학습' 레슨 개수 · 1개에 약 10~15문제</span></div>${segHTML('lessons', [[2, '2'], [3, '3'], [4, '4'], [5, '5']])}</div>
+      <div class="sr"><div class="t"><b>하루 최대 새 단어</b><span class="d">복습이 밀리면 자동으로 줄어요</span></div>${segHTML('daily', [[5, '5'], [10, '10'], [15, '15'], [20, '20'], [30, '30']])}</div>
       <div class="sr"><div class="t"><b>하루 목표 XP</b><span class="d">연속 학습은 레슨 하나만 해도 이어져요</span></div>${segHTML('goal', [[20, '20'], [50, '50'], [80, '80'], [120, '120']])}</div>
       <div class="sr"><div class="t"><b>복습 방식</b><span class="d">퀴즈로 풀기, 또는 카드로 알아요/몰라요</span></div>${segHTML('review', [['quiz', '퀴즈'], ['card', '카드']])}</div>
       <div class="sr"><div class="t"><b>직접 쓰는 문제</b><span class="d">복습 때 한글 보고 쓰기·빈칸 쓰기·받아쓰기도 내기</span></div>${swHTML('spell', '스펠링 문제')}</div>
@@ -1369,6 +1352,8 @@ const ACT = {
   lesson: () => startLesson(),
   lessonExtra: () => startLesson({ extra: L.LESSON_NEW }),
   lessonMore: () => startLesson({ more: true }),
+  lessonRev: () => startLesson({ more: true, kind: 'rev' }),
+  planNext: () => startLesson({ more: true }),
   next: () => nextLearn(),
   pick: el => pick(Number(el.dataset.i)),
   mpick: el => mpick(el),
@@ -1410,6 +1395,7 @@ const ACT = {
     const k = el.dataset.k, raw = el.dataset.v, v = /^\d+$/.test(raw) ? Number(raw) : raw;
     state.settings[k] = v;
     if (k === 'daily') L.refreshPlan(state, W, today());
+    if (k === 'daily' || k === 'lessons') state.today = null;   // re-plan today with the new amounts
     if (k === 'goal') { const ds = state.days[L.dayKey(today())]; if (ds && ds.xp >= v) ds.met = true; }
     if (k === 'theme') applyTheme();
     save(); renderSettings();

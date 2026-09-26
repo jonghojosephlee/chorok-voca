@@ -191,6 +191,38 @@ for (const id of worst.lesson.newIds) assert.deepStrictEqual(s5.prog[id].slice(0
 assert.strictEqual(L.sanitize({ lesson: { kind: 'lesson', T: T0, steps: [{ k: 'learn', id: '1-1' }, { k: 'q', id: '1-1' }], i: 1 } }, W).lesson, null);
 assert.ok(L.sanitize({ lesson: { kind: 'lesson', T: T0, steps: [{ k: 'learn', id: '1-1' }], i: 1 } }, W).lesson);
 
+// 3b) today's plan: fixed lessons, reviews first, new words cut when reviews pile up
+function runPlanDay(state, T, pCorrect) {
+  let guard = 0;
+  while (true) {
+    const ps = L.planStatus(state, W, T);
+    if (ps.finished) return ps;
+    const x = ps.steps[ps.next];
+    const { lesson } = runLesson(state, T, pCorrect, { kind: x.kind });
+    assert.ok(lesson.newIds.length === x.nNew && lesson.revIds.length <= x.nRev + 5, 'lesson matches its step');
+    assert.ok(++guard <= 10, 'the plan finishes');
+  }
+}
+const s6 = L.newState();
+const p0 = L.planStatus(s6, W, T0);
+assert.deepStrictEqual(p0.steps.map(x => x.kind + x.nNew + '/' + x.nRev), ['new5/0', 'new5/0'], 'first day: two new-word lessons');
+runPlanDay(s6, T0, 1);
+assert.ok(L.planStatus(s6, W, T0).finished && s6.days[L.dayKey(T0)].lessons === 2);
+let learnedAt = [], maxSteps = 0, maxLeft = 0;
+for (let day = 1; day <= 60; day++) {
+  const T = T0 + day, ps = runPlanDay(s6, T, 0.8), plan = s6.today;
+  maxSteps = Math.max(maxSteps, plan.steps.length); maxLeft = Math.max(maxLeft, ps.left.rev);
+  assert.ok(plan.steps.length <= s6.settings.lessons, 'never more lessons than the setting');
+  if ([10, 30, 60].includes(day)) learnedAt.push(`day ${day}: ${Object.keys(s6.prog).length} words started, reviews left over ${ps.left.rev}`);
+}
+console.log('plan (3 lessons, up to 10 new, 80% right):', learnedAt.join(' | '), '| most lessons in a day', maxSteps);
+// a backlog: 55 reviews due -> three review lessons, no new words, 25 wait for tomorrow
+const s7 = L.newState(); let k7 = 0;
+for (const e of W.words) { if (k7 >= 55) break; s7.prog[e.id] = [2, T0, 1, 0, T0 - 3]; k7++; }
+const p7 = L.planStatus(s7, W, T0);
+assert.deepStrictEqual(p7.steps.map(x => x.kind), ['rev', 'rev', 'rev']);
+assert.ok(p7.left.rev === 25 && p7.cut === 10);
+
 // 4) tests
 const s3 = L.newState();
 runLesson(s3, T0, 1);

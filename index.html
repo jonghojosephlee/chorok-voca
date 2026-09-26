@@ -529,7 +529,7 @@ select{font-size:16px;font-weight:800;padding:9px 12px;border-radius:12px;border
 <div class="toast" id="toast" role="status" hidden></div>
 <canvas id="confetti" hidden></canvas>
 <input type="file" id="filePick" class="vh" tabindex="-1" aria-hidden="true">
-<script>window.__CV__ = {"mode": "pwa", "version": "2.0.5", "crypto": {"salt": "5XuliZAP9T9FrI1CC7f7sg==", "iter": 600000}, "data": {"words": "data/words.bin", "rev": "1a89ee1d6703"}, "audio": {"base": "data/audio/", "enc": true, "v": "5c2459ab44", "days": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}};</script>
+<script>window.__CV__ = {"mode": "pwa", "version": "2.0.6", "crypto": {"salt": "5XuliZAP9T9FrI1CC7f7sg==", "iter": 600000}, "data": {"words": "data/words.bin", "rev": "1a89ee1d6703"}, "audio": {"base": "data/audio/", "enc": true, "v": "5c2459ab44", "days": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}};</script>
 <script></script>
 <script>
 /* 초록 보카 core logic: words, spaced repetition, question generation, lessons and tests.
@@ -541,7 +541,7 @@ const Logic = (() => {
   const MAXBOX = INTERVAL.length - 1;
   const MASTER = 5;                                 // box at which a word counts as mastered
   const DAYMS = 864e5, SHIFT = 4 * 36e5;            // a study day rolls over at 4am local time
-  const REVIEW_CAP = 60, BATCH = 5, RETRY_GAP = 3;
+  const LESSON_NEW = 5, LESSON_REV = 5, REVIEW_LESSON = 10;   // a lesson: 5 new words + up to 5 reviews, or 10 reviews
   const MIX_TYPES = ['mcq-ko', 'mcq-en', 'syn', 'listen', 'spell'];
 
   const dayNum = (t = Date.now()) => { const d = new Date(t - SHIFT); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / DAYMS); };
@@ -553,7 +553,6 @@ const Logic = (() => {
   }
   const pick = a => a[Math.floor(rand() * a.length)];
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-  const chunk = (a, n) => { const out = []; for (let i = 0; i < a.length; i += n) out.push(a.slice(i, i + n)); return out; };
 
   /* ---------- words ---------- */
   const KO_END = /(적으로|스럽게|스러운|시키다|시키는|하다|하게|하는|되다|되는|적인|로운|롭게|된|한|인|의|는|은|게|히|다)$/;
@@ -697,6 +696,8 @@ const Logic = (() => {
     out.prog = prog;
     for (const key of ['stars', 'wrong', 'days', 'spots']) if (!out[key] || typeof out[key] !== 'object' || Array.isArray(out[key])) out[key] = {};
     if (!Array.isArray(out.tests)) out.tests = [];
+    // a half-done lesson from before short lessons is dropped; its answers are already in prog
+    if (out.lesson && out.lesson.v !== 3 && out.lesson.i < (out.lesson.steps || []).length) out.lesson = null;
     return out;
   }
   function fromV1(v1) {   // the first version stored {prog, meta:{daily, front, tts, start, nt, days}}
@@ -715,7 +716,7 @@ const Logic = (() => {
     const k = dayKey(T);
     return state.days[k] || (state.days[k] = { xp: 0, n: 0, r: 0, ok: 0, t: 0, done: false, miss: [] });
   }
-  function dayMet(state, k) { const d = state.days[k]; return !!d && !!(d.done || d.met); }
+  function dayMet(state, k) { const d = state.days[k]; return !!d && !!(d.done || d.met || d.lessons); }   // one lesson keeps the streak
   function addXp(state, ds, xp) {
     ds.xp += xp;
     state.xpTotal = (state.xpTotal || 0) + xp;
@@ -775,38 +776,31 @@ const Logic = (() => {
     ensurePlan(state, W, T);
     if (opts.extra) state.nt.ids = state.nt.ids.concat(pickNew(state, W, opts.extra, new Set(state.nt.ids)));
     const ntSet = new Set(state.nt.ids);
-    const fresh = state.nt.ids.filter(id => !state.prog[id]);
-    const pendingNew = state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T);
-    const dueAll = W.words.filter(e => { const p = state.prog[e.id]; return p && p[1] <= T && !ntSet.has(e.id); })
-      .sort((a, b) => state.prog[a.id][1] - state.prog[b.id][1] || state.prog[a.id][0] - state.prog[b.id][0] || a.i - b.i);
-    const rev = shuffle(dueAll.slice(0, REVIEW_CAP).map(e => e.id));
-    const revSteps = rev.map(id => ({ k: 'q', id, qt: reviewType(state.prog[id][0], s, hasAudio) }))
-      .concat(pendingNew.map(id => ({ k: 'q', id, qt: 'mcq-ko', nw: 1 })));
-    const steps = [];
-    const revChunks = chunk(revSteps, 5);
-    let ri = 0;
-    for (const b of chunk(fresh, BATCH)) {
-      if (ri < revChunks.length) steps.push(...revChunks[ri++]);
-      for (const id of b) steps.push({ k: 'learn', id });
-      for (const id of shuffle(b.slice())) steps.push({ k: 'q', id, qt: 'mcq-ko', nw: 1 });
-    }
-    while (ri < revChunks.length) steps.push(...revChunks[ri++]);
+    const fresh = state.nt.ids.filter(id => !state.prog[id]).slice(0, LESSON_NEW);
+    const pendingNew = state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T);   // missed in a lesson left unfinished
+    const due = W.words.filter(e => { const p = state.prog[e.id]; return p && p[1] <= T && !ntSet.has(e.id); })
+      .sort((a, b) => state.prog[a.id][1] - state.prog[b.id][1] || state.prog[a.id][0] - state.prog[b.id][0] || a.i - b.i)
+      .map(e => e.id);
+    const rev = pendingNew.concat(due).slice(0, fresh.length ? LESSON_REV : REVIEW_LESSON);
+    const steps = shuffle(rev.map(id => ntSet.has(id) ? { k: 'q', id, qt: 'mcq-ko', nw: 1 } : { k: 'q', id, qt: reviewType(state.prog[id][0], s, hasAudio) }));
+    for (const id of fresh) steps.push({ k: 'learn', id });
+    for (const id of shuffle(fresh.slice())) steps.push({ k: 'q', id, qt: 'mcq-ko', nw: 1 });
+    const d = state.days[dayKey(T)];
     return {
-      kind: 'lesson', T, created: Date.now(), steps, i: 0,
-      newIds: fresh.concat(pendingNew), revIds: rev, revMore: dueAll.length - rev.length,
+      kind: 'lesson', v: 3, T, no: ((d && d.lessons) || 0) + 1, created: Date.now(), steps, i: 0, base: steps.length, fin: 0,
+      newIds: fresh, revIds: rev,
       seen: {}, failed: {}, done: {},
       stat: { firstOk: 0, firstN: 0, xp: 0, combo: 0, maxCombo: 0, ms: 0 },
     };
   }
-  function lessonUnits(L) {   // words to finish, for the progress bar
-    const ids = new Set(L.steps.filter(s => s.k === 'q').map(s => s.id));
-    return { total: ids.size, done: Object.keys(L.done).length };
+  function lessonUnits(L) {   // screens finished, for the progress bar; a miss counts once its retry is done
+    return { total: L.base || 0, done: Math.min(L.fin || 0, L.base || 0) };
   }
   function answerLesson(state, L, correct) {
     const st = L.steps[L.i];
     const res = { xp: 0, first: false, combo: L.stat.combo, retry: false, done: false };
     if (!st) return res;
-    if (st.k === 'learn') { L.i++; return res; }
+    if (st.k === 'learn') { L.i++; L.fin = (L.fin || 0) + 1; return res; }
     const id = st.id, T = L.T;
     const first = !L.seen[id];
     L.seen[id] = (L.seen[id] || 0) + 1;
@@ -826,14 +820,18 @@ const Logic = (() => {
       if (L.stat.combo >= 5 && L.stat.combo % 5 === 0) res.xp += 2;
     } else {
       if (p && !isNew && first) lapses++;
-      box = 1; due = T;
+      box = 1;
+      due = st.r ? T + 1 : T;   // missed again on the retry: no more tries today, it comes back tomorrow
       L.failed[id] = 1;
       state.wrong[id] = [((state.wrong[id] || [0])[0] || 0) + 1, T];
-      const again = { k: 'q', id, qt: retryType(st.qt), r: 1 };
-      if (st.nw) again.nw = 1;
-      L.steps.splice(Math.min(L.i + 1 + RETRY_GAP, L.steps.length), 0, again);
-      res.retry = true;
+      if (!st.r) {   // asked once more at the end of the lesson
+        const again = { k: 'q', id, qt: retryType(st.qt), r: 1 };
+        if (st.nw) again.nw = 1;
+        L.steps.push(again);
+        res.retry = true;
+      }
     }
+    if (correct || st.r) L.fin = (L.fin || 0) + 1;
     state.prog[id] = [box, due, reps, lapses, T];
     const ds = dayStats(state, T);
     addXp(state, ds, res.xp);
@@ -907,7 +905,7 @@ const Logic = (() => {
   function clearWrong(state, id) { delete state.wrong[id]; }
 
   return {
-    INTERVAL, MAXBOX, MASTER, MIX_TYPES, REVIEW_CAP, dayNum, dayKey, seed, shuffle, pick,
+    INTERVAL, MAXBOX, MASTER, MIX_TYPES, LESSON_NEW, LESSON_REV, REVIEW_LESSON, dayNum, dayKey, seed, shuffle, pick,
     stems, posOf, synonymsOf, prepare, related, makeQuestion, checkSpell, normSpell,
     defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, addXp, streak, touchBest,
     pickNew, ensurePlan, refreshPlan, todayPlan, statusOf,
@@ -1424,19 +1422,23 @@ function renderHome() {
   const plan = L.todayPlan(s, W, T), ds = s.days[L.dayKey(T)] || { xp: 0 };
   const xp = ds.xp || 0, goal = st.goal, met = L.dayMet(s, L.dayKey(T)), streak = L.streak(s, T);
   const dateLabel = new Intl.DateTimeFormat('ko-KR', { timeZone: 'UTC', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date(T * 864e5));
-  const lesson = s.lesson, left = plan.rev + plan.newLeft;
+  const lesson = s.lesson, doneL = ds.lessons || 0, goalL = Math.max(1, Math.ceil(st.daily / L.LESSON_NEW));
   let cta, say, mood = 'idle';
   if (lesson) {
     const u = L.lessonUnits(lesson);
     cta = `<button class="btn" type="button" data-act="lesson">${I.play}이어서 하기 · ${u.done}/${u.total}</button>`;
-    say = `하던 학습이 있어요!<small>${u.done}/${u.total}까지 했어요. 그 문제부터 이어서 해요.</small>`;
-  } else if (left > 0) {
-    cta = `<button class="btn" type="button" data-act="lesson">${I.play}${ds.t ? '이어서 학습' : '학습 시작'}</button>`;
-    const first = plan.newIds.length ? W.byId.get(plan.newIds[0]) : null;
-    say = (streak ? `${streak}일 연속 학습 중! 오늘도 이어가요.` : plan.newLeft ? `오늘 새 단어 ${plan.newLeft}개, 같이 해봐요!` : `복습할 단어 ${plan.rev}개가 기다려요.`) +
-      `<small>${first ? `새 단어 <span lang="en">${esc(first.w)}</span>${plan.newIds.length > 1 ? ` 외 ${plan.newIds.length - 1}개` : ''} · Day ${pad2(first.d)}` : '오늘은 복습만 남았어요'}${plan.rev && plan.newLeft ? ` · 복습 ${plan.rev}개` : ''}</small>`;
+    say = `하던 레슨이 있어요!<small>${u.done}/${u.total}까지 했어요. 그 문제부터 이어서 해요.</small>`;
+  } else if (plan.newLeft > 0) {
+    const first = W.byId.get(plan.newIds[0]), nRev = Math.min(L.LESSON_REV, plan.rev);
+    cta = `<button class="btn" type="button" data-act="lesson">${I.play}레슨 ${doneL < goalL ? `${doneL + 1}/${goalL}` : doneL + 1} 시작</button>`;
+    say = (doneL ? `좋아요! 오늘 레슨 ${doneL}개 했어요.` : streak ? `${streak}일 연속 학습 중! 레슨 하나면 오늘도 이어져요.` : `오늘은 짧은 레슨 ${goalL}개예요!`) +
+      `<small>이번 레슨: 새 단어 ${Math.min(L.LESSON_NEW, plan.newLeft)}개${nRev ? ` + 복습 ${nRev}개` : ''} · <span lang="en">${esc(first.w)}</span>부터 · Day ${pad2(first.d)}</small>`;
+  } else if (plan.rev > 0) {
+    cta = `<button class="btn" type="button" data-act="lesson">${I.play}복습 레슨 시작 · ${Math.min(L.REVIEW_LESSON, plan.rev)}문제</button>`;
+    say = `오늘 새 단어는 다 했어요! 복습이 ${plan.rev}개 남았어요.<small>${plan.rev <= L.REVIEW_LESSON ? '레슨 하나면 끝나요.' : `한 번에 ${L.REVIEW_LESSON}문제씩, 하고 싶은 만큼만 해요.`}</small>`;
+    if (doneL) mood = 'happy';
   } else {
-    cta = `<button class="btn gold" type="button" data-act="lessonExtra">${I.bolt}새 단어 ${st.daily}개 더 하기</button>`;
+    cta = `<button class="btn gold" type="button" data-act="lessonExtra">${I.bolt}새 단어 ${L.LESSON_NEW}개 더 하기</button>`;
     say = `오늘 학습 끝! 정말 잘했어요.<small>${xp >= goal ? '오늘 목표 XP도 채웠어요' : '더 하고 싶으면 새 단어를 추가해요'}</small>`;
     mood = 'happy';
   }
@@ -1492,7 +1494,7 @@ function renderHome() {
 }
 async function onboard() {
   if (state.onboarded || screen !== 'home') return;
-  const v = await sheet(`${mascot('happy', 'hop')}<h3>안녕하세요! 저는 초록이예요</h3><p>하루에 새 단어 몇 개씩 해볼까요? 복습할 단어는 제가 알아서 챙길게요. 나중에 설정에서 바꿀 수 있어요.</p>
+  const v = await sheet(`${mascot('happy', 'hop')}<h3>안녕하세요! 저는 초록이예요</h3><p>하루에 새 단어 몇 개씩 해볼까요? 5개씩 짧은 레슨으로 나누고, 복습은 제가 알아서 섞어 드릴게요. 레슨 하나만 해도 연속 학습이 이어져요.</p>
     <div class="seg" id="obSeg">${[5, 10, 15, 20].map(n => `<button type="button" data-act="obPick" data-v="${n}" aria-pressed="${n === state.settings.daily}">${n}개</button>`).join('')}</div>
     <button class="btn" type="button" data-act="sheet" data-v="go">시작하기</button>`);
   state.onboarded = true;
@@ -1696,23 +1698,26 @@ function finish() {
 function renderLessonResult(s, r) {
   const T = s.T, streak = L.streak(state, T), ds = state.days[L.dayKey(T)] || { xp: 0 };
   const acc = s.stat.firstN ? Math.round(s.stat.firstOk / s.stat.firstN * 100) : 100;
-  const learned = s.newIds.filter(id => s.done[id]).length, failed = Object.keys(s.failed);
-  const plan = r.plan, goal = state.settings.goal, met = L.dayMet(state, L.dayKey(T));
+  const failed = Object.keys(s.failed);
+  const plan = r.plan, goal = state.settings.goal, more = plan.rev + plan.newLeft;
+  const doneL = ds.lessons || 0, goalL = Math.max(1, Math.ceil(state.settings.daily / L.LESSON_NEW));
+  const next = plan.newLeft ? `다음 레슨 · 새 단어 ${Math.min(L.LESSON_NEW, plan.newLeft)}개` : `복습 레슨 · ${Math.min(L.REVIEW_LESSON, plan.rev)}문제`;
+  const summary = [s.newIds.length ? `새 단어 ${s.newIds.length}개` : '', s.revIds.length ? `복습 ${s.revIds.length}개` : ''].filter(Boolean).join(' · ') || '레슨을 마쳤어요';
   $('s-result').innerHTML = `<div class="wrap result">
     ${mascot('happy', 'hop')}
-    <h1>${plan.rev + plan.newLeft ? '학습 완료!' : '오늘의 학습 완료!'}</h1>
-    <p class="muted">${learned ? `새 단어 ${learned}개를 익혔어요` : '복습을 마쳤어요'}${s.revIds.length ? ` · 복습 ${s.revIds.length}개` : ''}</p>
+    <h1>${more ? `레슨 ${s.no || doneL} 완료!` : '오늘의 학습 완료!'}</h1>
+    <p class="muted">${summary}${plan.newLeft && doneL < goalL ? ` · 오늘 레슨 ${doneL}/${goalL}` : ''}</p>
     <div class="rstats">
       <div class="rs gold"><small>획득 XP</small><b>${I.bolt}<span id="rxp">0</span></b></div>
       <div class="rs green"><small>정확도</small><b>${acc}%</b></div>
       <div class="rs blue"><small>시간</small><b>${mmss(s.stat.ms)}</b></div>
     </div>
-    <div class="streakbig">${streak ? I.flame : I.flameOff}<span><b>${streak ? streak + '일 연속 학습!' : '오늘 목표까지 조금 남았어요'}</b><small>오늘 ${fmt(ds.xp)} / ${goal} XP${ds.xp >= goal ? ' · 목표 달성' : met ? ' · 오늘 카드 완료' : ''}</small></span></div>
-    ${failed.length ? `<div class="sec" style="width:100%"><h2>다시 본 단어</h2><span>${failed.length}개</span></div><ul class="panel wlist">${failed.map(id => rowHTML(W.byId.get(id))).join('')}</ul>` : ''}
-    <button class="btn" type="button" data-act="tab" data-tab="home">계속</button>
-    ${plan.rev ? `<button class="btn alt" type="button" data-act="lessonMore">남은 복습 ${plan.rev}개 하기</button>` : ''}
-    ${failed.length ? `<button class="btn alt" type="button" data-act="browseIds" data-ids="${failed.join(',')}" data-label="다시 본 단어">다시 본 단어 카드로 보기</button>` : ''}
-    <button class="btn alt" type="button" data-act="lessonExtra">새 단어 ${state.settings.daily}개 더</button>
+    <div class="streakbig">${streak ? I.flame : I.flameOff}<span><b>${streak ? streak + '일 연속 학습!' : '오늘 목표까지 조금 남았어요'}</b><small>오늘 ${fmt(ds.xp)} / ${goal} XP${ds.xp >= goal ? ' · 목표 달성' : ''}</small></span></div>
+    ${more ? `<button class="btn" type="button" data-act="lessonMore">${I.play}${next}</button>
+    <button class="btn alt" type="button" data-act="tab" data-tab="home">오늘은 여기까지</button>` : `<button class="btn" type="button" data-act="tab" data-tab="home">계속</button>
+    <button class="btn alt" type="button" data-act="lessonExtra">새 단어 ${L.LESSON_NEW}개 더</button>`}
+    ${failed.length ? `<div class="sec" style="width:100%"><h2>틀린 단어</h2><span>${failed.length}개 · 내일 다시 나와요</span></div><ul class="panel wlist">${failed.map(id => rowHTML(W.byId.get(id))).join('')}</ul>
+    <button class="btn alt" type="button" data-act="browseIds" data-ids="${failed.join(',')}" data-label="틀린 단어">틀린 단어 카드로 보기</button>` : ''}
   </div>`;
   countUp($('rxp'), s.stat.xp);
 }
@@ -2072,8 +2077,8 @@ function renderSettings() {
     <div class="topbar"><button class="ibtn" type="button" data-act="back" aria-label="뒤로">${I.back}</button><h1 style="flex:1">설정</h1></div>
     <p class="set-h">학습</p>
     <div class="panel set">
-      <div class="sr"><div class="t"><b>하루 새 단어</b><span class="d">매일 새로 익힐 단어 수</span></div>${segHTML('daily', [[5, '5'], [10, '10'], [15, '15'], [20, '20'], [30, '30']])}</div>
-      <div class="sr"><div class="t"><b>하루 목표 XP</b><span class="d">채우면 연속 학습일이 이어져요</span></div>${segHTML('goal', [[20, '20'], [50, '50'], [80, '80'], [120, '120']])}</div>
+      <div class="sr"><div class="t"><b>하루 새 단어</b><span class="d">매일 새로 익힐 단어 수 · 5개마다 레슨 1개</span></div>${segHTML('daily', [[5, '5'], [10, '10'], [15, '15'], [20, '20'], [30, '30']])}</div>
+      <div class="sr"><div class="t"><b>하루 목표 XP</b><span class="d">연속 학습은 레슨 하나만 해도 이어져요</span></div>${segHTML('goal', [[20, '20'], [50, '50'], [80, '80'], [120, '120']])}</div>
       <div class="sr"><div class="t"><b>복습 방식</b><span class="d">퀴즈로 풀기, 또는 카드로 알아요/몰라요</span></div>${segHTML('review', [['quiz', '퀴즈'], ['card', '카드']])}</div>
       <div class="sr"><div class="t"><b>스펠링 문제</b><span class="d">잘 아는 단어는 직접 쓰기로 복습</span></div>${swHTML('spell', '스펠링 문제')}</div>
       <div class="sr"><div class="t"><b>카드 앞면</b><span class="d">카드로 볼 때 먼저 보일 쪽</span></div>${segHTML('front', [['en', '영어'], ['ko', '한국어']])}</div>
@@ -2217,7 +2222,7 @@ const ACT = {
   say: el => { sayBtnFeedback(el); Voice.play(el.dataset.id); },
   star: el => toggleStar(el.dataset.id, el),
   lesson: () => startLesson(),
-  lessonExtra: () => startLesson({ extra: state.settings.daily }),
+  lessonExtra: () => startLesson({ extra: L.LESSON_NEW }),
   lessonMore: () => startLesson({ more: true }),
   next: () => nextLearn(),
   pick: el => pick(Number(el.dataset.i)),

@@ -1,4 +1,4 @@
-const VERSION = '2.0.5-9a3182287f';
+const VERSION = '2.0.6-04f0f92886';
 const AUDIO_V = '5c2459ab44';
 const SHELL = 'cv-shell-' + VERSION;
 const DATA = 'cv-data';

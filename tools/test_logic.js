@@ -50,7 +50,7 @@ const wtd = W.words.find(e => e.w === 'well-to-do');
 assert.ok(L.checkSpell(wtd, 'well to do') && L.checkSpell(wtd, 'welltodo'));
 assert.ok(!L.checkSpell(acc, ''));
 
-// 3) lesson simulation
+// 3) lesson simulation: short lessons of 5 new words (+ up to 5 reviews), or 10 reviews
 function runLesson(state, T, pCorrect, opts = {}) {
   const lesson = L.buildLesson(state, W, T, Object.assign({ hasAudio: true }, opts));
   let guard = 0, retries = 0;
@@ -59,52 +59,62 @@ function runLesson(state, T, pCorrect, opts = {}) {
     const ok = st.k === 'learn' ? true : Math.random() < pCorrect;
     const r = L.answerLesson(state, lesson, ok);
     if (r.retry) retries++;
-    assert.ok(++guard < 5000, 'lesson terminates');
+    assert.ok(++guard < 100, 'lesson terminates');
   }
+  const u = L.lessonUnits(lesson);
+  assert.strictEqual(u.done, u.total, 'progress bar full at the end');
+  assert.ok(lesson.steps.length <= 2 * lesson.base, 'each question retried at most once');
   L.finishLesson(state, W, lesson);
   return { lesson, retries };
 }
 const s = L.newState();
 const T0 = L.dayNum(Date.UTC(2026, 8, 26, 12));
 const r1 = runLesson(s, T0, 0.7);
-const newIds = r1.lesson.newIds;
-assert.strictEqual(newIds.length, 10);
+assert.strictEqual(r1.lesson.newIds.length, 5);
+assert.strictEqual(r1.lesson.base, 10, '5 cards + 5 questions');
+assert.strictEqual(L.streak(s, T0), 1, 'one lesson keeps the streak');
+assert.ok(!s.days[L.dayKey(T0)].done);
+assert.strictEqual(L.todayPlan(s, W, T0).newLeft, 5);
+const r2 = runLesson(s, T0, 0.7);
+const newIds = [...r1.lesson.newIds, ...r2.lesson.newIds];
+assert.strictEqual(new Set(newIds).size, 10);
 for (const id of newIds) { assert.deepStrictEqual(s.prog[id].slice(0, 2), [1, T0 + 1], 'new word scheduled for tomorrow ' + id); }
 const d0 = s.days[L.dayKey(T0)];
-assert.strictEqual(d0.n, 10);
+assert.ok(d0.n <= 10 && d0.n >= 10 - Object.keys(s.wrong).filter(id => s.wrong[id][0] >= 2).length, 'a word missed twice is not counted as learned');
+assert.strictEqual(d0.lessons, 2);
 assert.ok(d0.done, 'day marked done');
-assert.ok(r1.retries >= 0);
-console.log('day0 lesson steps', r1.lesson.steps.length, 'retries', r1.retries, 'xp', d0.xp, 'first-try', d0.ok + '/' + d0.t, 'streak', L.streak(s, T0));
+console.log('day0 lessons', r1.lesson.steps.length + '+' + r2.lesson.steps.length, 'screens, retries', r1.retries + r2.retries, 'xp', d0.xp, 'first-try', d0.ok + '/' + d0.t, 'streak', L.streak(s, T0));
 
-// the same day again: nothing left but extra words can be added
+// the same day again: nothing left but extra words can be added, one lesson at a time
 assert.strictEqual(L.todayPlan(s, W, T0).newLeft, 0);
-const extra = runLesson(s, T0, 1, { extra: 10 });
-assert.strictEqual(extra.lesson.newIds.length, 10);
-assert.strictEqual(s.days[L.dayKey(T0)].n, 20);
+const nBefore = s.days[L.dayKey(T0)].n;
+const extra = runLesson(s, T0, 1, { extra: L.LESSON_NEW });
+assert.strictEqual(extra.lesson.newIds.length, 5);
+assert.strictEqual(s.days[L.dayKey(T0)].n, nBefore + 5);
 
-// next days: all correct -> boxes climb along the interval ladder
-let T = T0, maxRev = 0;
+// next days: all correct -> boxes climb along the interval ladder; every lesson stays short
+let T = T0, maxRev = 0, maxBase = 0;
 for (let day = 1; day <= 70; day++) {
   T = T0 + day;
-  const plan = L.todayPlan(s, W, T);
-  maxRev = Math.max(maxRev, plan.rev);
+  maxRev = Math.max(maxRev, L.todayPlan(s, W, T).rev);
   let rounds = 0;
-  do {
+  while (L.todayPlan(s, W, T).rev > 0 || L.todayPlan(s, W, T).newLeft > 0) {
     const { lesson } = runLesson(s, T, 1);
-    assert.ok(lesson.revIds.length <= L.REVIEW_CAP, 'review cap');
-    assert.ok(++rounds <= 4, 'reviews finish in a few rounds');
-  } while (L.todayPlan(s, W, T).rev > 0);
+    maxBase = Math.max(maxBase, lesson.base);
+    assert.ok(lesson.base <= 2 * L.LESSON_NEW + L.LESSON_REV && lesson.base <= Math.max(15, L.REVIEW_LESSON), 'short lesson');
+    assert.ok(++rounds <= 20, 'the day finishes');
+  }
 }
-const first20 = [...newIds, ...extra.lesson.newIds];
-const boxes = first20.map(id => s.prog[id][0]);
-console.log('max reviews in a day', maxRev);
-console.log('after 70 perfect days, first 20 words boxes', boxes.join(','), 'streak', L.streak(s, T), 'best', s.best);
+const first15 = [...newIds, ...extra.lesson.newIds];
+const boxes = first15.map(id => s.prog[id][0]);
+console.log('max reviews in a day', maxRev, 'longest lesson', maxBase, 'screens');
+console.log('after 70 perfect days, first 15 words boxes', boxes.join(','), 'streak', L.streak(s, T), 'best', s.best);
 assert.ok(boxes.every(b => b >= L.MASTER), 'first words mastered');
 assert.strictEqual(L.streak(s, T), 71);
 
-// a wrong answer on a review sends the word back to box 1 and asks it again in the same lesson
+// a wrong answer: back to box 1 and asked once more at the end of the lesson; a second miss waits for tomorrow
 const s2 = L.newState();
-runLesson(s2, T0, 1);
+runLesson(s2, T0, 1); runLesson(s2, T0, 1);
 const lesson2 = L.buildLesson(s2, W, T0 + 1, { hasAudio: false });
 const firstQ = lesson2.steps.findIndex(x => x.k === 'q' && !x.nw);
 assert.ok(firstQ >= 0);
@@ -114,13 +124,28 @@ const before = lesson2.steps.length;
 L.answerLesson(s2, lesson2, false);
 assert.strictEqual(lesson2.steps.length, before + 1);
 assert.strictEqual(s2.prog[wid][0], 1);
-assert.strictEqual(s2.prog[wid][1], T0 + 1, 'failed word stays due today');
+assert.strictEqual(s2.prog[wid][1], T0 + 1, 'missed word stays due today until its retry');
 assert.ok(s2.wrong[wid][0] === 1);
-const retryAt = lesson2.steps.findIndex((x, i) => i > firstQ && x.id === wid && x.r);
-assert.ok(retryAt === firstQ + 1 + 3 || retryAt === lesson2.steps.length - 1, 'retry placed 3 steps later');
+const retryAt = lesson2.steps.length - 1;
+assert.ok(lesson2.steps[retryAt].id === wid && lesson2.steps[retryAt].r, 'retry placed at the end');
 // resume: the lesson object survives JSON round trip
 const copy = JSON.parse(JSON.stringify(lesson2));
 assert.deepStrictEqual(copy.steps, lesson2.steps);
+lesson2.i = retryAt;
+const rr = L.answerLesson(s2, lesson2, false);
+assert.ok(!rr.retry && lesson2.i === lesson2.steps.length, 'no third try');
+assert.deepStrictEqual(s2.prog[wid].slice(0, 2), [1, T0 + 2], 'second miss comes back tomorrow');
+assert.strictEqual(s2.wrong[wid][0], 2);
+
+// every answer wrong: the lesson still ends after one retry per question
+const s5 = L.newState();
+const worst = runLesson(s5, T0, 0);
+assert.strictEqual(worst.lesson.steps.length, worst.lesson.base + 5);
+for (const id of worst.lesson.newIds) assert.deepStrictEqual(s5.prog[id].slice(0, 2), [1, T0 + 1]);
+
+// a half-done lesson saved by the old version is dropped; a finished one is kept so it can be settled
+assert.strictEqual(L.sanitize({ lesson: { kind: 'lesson', T: T0, steps: [{ k: 'learn', id: '1-1' }, { k: 'q', id: '1-1' }], i: 1 } }, W).lesson, null);
+assert.ok(L.sanitize({ lesson: { kind: 'lesson', T: T0, steps: [{ k: 'learn', id: '1-1' }], i: 1 } }, W).lesson);
 
 // 4) tests
 const s3 = L.newState();

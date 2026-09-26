@@ -7,7 +7,7 @@ const Logic = (() => {
   const MAXBOX = INTERVAL.length - 1;
   const MASTER = 5;                                 // box at which a word counts as mastered
   const DAYMS = 864e5, SHIFT = 4 * 36e5;            // a study day rolls over at 4am local time
-  const REVIEW_CAP = 60, BATCH = 5, RETRY_GAP = 3;
+  const LESSON_NEW = 5, LESSON_REV = 5, REVIEW_LESSON = 10;   // a lesson: 5 new words + up to 5 reviews, or 10 reviews
   const MIX_TYPES = ['mcq-ko', 'mcq-en', 'syn', 'listen', 'spell'];
 
   const dayNum = (t = Date.now()) => { const d = new Date(t - SHIFT); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / DAYMS); };
@@ -19,7 +19,6 @@ const Logic = (() => {
   }
   const pick = a => a[Math.floor(rand() * a.length)];
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-  const chunk = (a, n) => { const out = []; for (let i = 0; i < a.length; i += n) out.push(a.slice(i, i + n)); return out; };
 
   /* ---------- words ---------- */
   const KO_END = /(적으로|스럽게|스러운|시키다|시키는|하다|하게|하는|되다|되는|적인|로운|롭게|된|한|인|의|는|은|게|히|다)$/;
@@ -163,6 +162,8 @@ const Logic = (() => {
     out.prog = prog;
     for (const key of ['stars', 'wrong', 'days', 'spots']) if (!out[key] || typeof out[key] !== 'object' || Array.isArray(out[key])) out[key] = {};
     if (!Array.isArray(out.tests)) out.tests = [];
+    // a half-done lesson from before short lessons is dropped; its answers are already in prog
+    if (out.lesson && out.lesson.v !== 3 && out.lesson.i < (out.lesson.steps || []).length) out.lesson = null;
     return out;
   }
   function fromV1(v1) {   // the first version stored {prog, meta:{daily, front, tts, start, nt, days}}
@@ -181,7 +182,7 @@ const Logic = (() => {
     const k = dayKey(T);
     return state.days[k] || (state.days[k] = { xp: 0, n: 0, r: 0, ok: 0, t: 0, done: false, miss: [] });
   }
-  function dayMet(state, k) { const d = state.days[k]; return !!d && !!(d.done || d.met); }
+  function dayMet(state, k) { const d = state.days[k]; return !!d && !!(d.done || d.met || d.lessons); }   // one lesson keeps the streak
   function addXp(state, ds, xp) {
     ds.xp += xp;
     state.xpTotal = (state.xpTotal || 0) + xp;
@@ -241,38 +242,31 @@ const Logic = (() => {
     ensurePlan(state, W, T);
     if (opts.extra) state.nt.ids = state.nt.ids.concat(pickNew(state, W, opts.extra, new Set(state.nt.ids)));
     const ntSet = new Set(state.nt.ids);
-    const fresh = state.nt.ids.filter(id => !state.prog[id]);
-    const pendingNew = state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T);
-    const dueAll = W.words.filter(e => { const p = state.prog[e.id]; return p && p[1] <= T && !ntSet.has(e.id); })
-      .sort((a, b) => state.prog[a.id][1] - state.prog[b.id][1] || state.prog[a.id][0] - state.prog[b.id][0] || a.i - b.i);
-    const rev = shuffle(dueAll.slice(0, REVIEW_CAP).map(e => e.id));
-    const revSteps = rev.map(id => ({ k: 'q', id, qt: reviewType(state.prog[id][0], s, hasAudio) }))
-      .concat(pendingNew.map(id => ({ k: 'q', id, qt: 'mcq-ko', nw: 1 })));
-    const steps = [];
-    const revChunks = chunk(revSteps, 5);
-    let ri = 0;
-    for (const b of chunk(fresh, BATCH)) {
-      if (ri < revChunks.length) steps.push(...revChunks[ri++]);
-      for (const id of b) steps.push({ k: 'learn', id });
-      for (const id of shuffle(b.slice())) steps.push({ k: 'q', id, qt: 'mcq-ko', nw: 1 });
-    }
-    while (ri < revChunks.length) steps.push(...revChunks[ri++]);
+    const fresh = state.nt.ids.filter(id => !state.prog[id]).slice(0, LESSON_NEW);
+    const pendingNew = state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T);   // missed in a lesson left unfinished
+    const due = W.words.filter(e => { const p = state.prog[e.id]; return p && p[1] <= T && !ntSet.has(e.id); })
+      .sort((a, b) => state.prog[a.id][1] - state.prog[b.id][1] || state.prog[a.id][0] - state.prog[b.id][0] || a.i - b.i)
+      .map(e => e.id);
+    const rev = pendingNew.concat(due).slice(0, fresh.length ? LESSON_REV : REVIEW_LESSON);
+    const steps = shuffle(rev.map(id => ntSet.has(id) ? { k: 'q', id, qt: 'mcq-ko', nw: 1 } : { k: 'q', id, qt: reviewType(state.prog[id][0], s, hasAudio) }));
+    for (const id of fresh) steps.push({ k: 'learn', id });
+    for (const id of shuffle(fresh.slice())) steps.push({ k: 'q', id, qt: 'mcq-ko', nw: 1 });
+    const d = state.days[dayKey(T)];
     return {
-      kind: 'lesson', T, created: Date.now(), steps, i: 0,
-      newIds: fresh.concat(pendingNew), revIds: rev, revMore: dueAll.length - rev.length,
+      kind: 'lesson', v: 3, T, no: ((d && d.lessons) || 0) + 1, created: Date.now(), steps, i: 0, base: steps.length, fin: 0,
+      newIds: fresh, revIds: rev,
       seen: {}, failed: {}, done: {},
       stat: { firstOk: 0, firstN: 0, xp: 0, combo: 0, maxCombo: 0, ms: 0 },
     };
   }
-  function lessonUnits(L) {   // words to finish, for the progress bar
-    const ids = new Set(L.steps.filter(s => s.k === 'q').map(s => s.id));
-    return { total: ids.size, done: Object.keys(L.done).length };
+  function lessonUnits(L) {   // screens finished, for the progress bar; a miss counts once its retry is done
+    return { total: L.base || 0, done: Math.min(L.fin || 0, L.base || 0) };
   }
   function answerLesson(state, L, correct) {
     const st = L.steps[L.i];
     const res = { xp: 0, first: false, combo: L.stat.combo, retry: false, done: false };
     if (!st) return res;
-    if (st.k === 'learn') { L.i++; return res; }
+    if (st.k === 'learn') { L.i++; L.fin = (L.fin || 0) + 1; return res; }
     const id = st.id, T = L.T;
     const first = !L.seen[id];
     L.seen[id] = (L.seen[id] || 0) + 1;
@@ -292,14 +286,18 @@ const Logic = (() => {
       if (L.stat.combo >= 5 && L.stat.combo % 5 === 0) res.xp += 2;
     } else {
       if (p && !isNew && first) lapses++;
-      box = 1; due = T;
+      box = 1;
+      due = st.r ? T + 1 : T;   // missed again on the retry: no more tries today, it comes back tomorrow
       L.failed[id] = 1;
       state.wrong[id] = [((state.wrong[id] || [0])[0] || 0) + 1, T];
-      const again = { k: 'q', id, qt: retryType(st.qt), r: 1 };
-      if (st.nw) again.nw = 1;
-      L.steps.splice(Math.min(L.i + 1 + RETRY_GAP, L.steps.length), 0, again);
-      res.retry = true;
+      if (!st.r) {   // asked once more at the end of the lesson
+        const again = { k: 'q', id, qt: retryType(st.qt), r: 1 };
+        if (st.nw) again.nw = 1;
+        L.steps.push(again);
+        res.retry = true;
+      }
     }
+    if (correct || st.r) L.fin = (L.fin || 0) + 1;
     state.prog[id] = [box, due, reps, lapses, T];
     const ds = dayStats(state, T);
     addXp(state, ds, res.xp);
@@ -373,7 +371,7 @@ const Logic = (() => {
   function clearWrong(state, id) { delete state.wrong[id]; }
 
   return {
-    INTERVAL, MAXBOX, MASTER, MIX_TYPES, REVIEW_CAP, dayNum, dayKey, seed, shuffle, pick,
+    INTERVAL, MAXBOX, MASTER, MIX_TYPES, LESSON_NEW, LESSON_REV, REVIEW_LESSON, dayNum, dayKey, seed, shuffle, pick,
     stems, posOf, synonymsOf, prepare, related, makeQuestion, checkSpell, normSpell,
     defaultSettings, newState, sanitize, fromV1, dayStats, dayMet, addXp, streak, touchBest,
     pickNew, ensurePlan, refreshPlan, todayPlan, statusOf,

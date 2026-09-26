@@ -17,12 +17,14 @@ ITER = 600_000
 
 # ---- words ----
 # example sentences (sent/dayNN.json: {n, si, en, ko}) ride along with each sense: [synonyms, meaning, example, its Korean]
+# D16#4 prevailing: the book prints rudimentary's meanings under it (marked unsure), so any example would pair the word with a wrong meaning
+NO_EXAMPLE = {(16, 4)}
 examples = {}
 for d in range(1, 31):
     sp = os.path.join(S, 'sent', f'day{d:02d}.json')
     if os.path.exists(sp):
         for r in json.load(open(sp)):
-            if (r.get('en') or '').strip():
+            if (r.get('en') or '').strip() and (d, r['n']) not in NO_EXAMPLE:
                 examples[(d, r['n'], r['si'])] = [r['en'].strip(), (r.get('ko') or '').strip()]
 rows = []
 for d in range(1, 31):

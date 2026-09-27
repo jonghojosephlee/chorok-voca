@@ -82,12 +82,43 @@ const dq = L.makeQuestion(W, '1-1', 'dict', true), dq0 = L.makeQuestion(W, '1-1'
 assert.ok(dq.t === 'dict' && dq0.t === 'spell' && s1q.t === 'spell' && s1q.lead === 1);
 console.log('senses with examples', withEx, 'cloze made', cz, 'context made', cx);
 
+// 1b) a sense row can carry its example's 풀이: [similar words, meaning, example, its Korean, chunks, tip]
+{ const W2 = L.prepare([[1, 1, 'test', [['try', '시험', 'We test it daily.', '우리는 매일 그것을 시험한다.', ['We / test it / daily.', '우리는 / 그것을 시험한다 / 매일'], '팁'], ['exam', '검사']]]]);
+  const s0 = W2.words[0].senses[0], s1 = W2.words[0].senses[1];
+  assert.ok(s0.ch && s0.ch.length === 2 && s0.tip === '팁' && s1.ch === null && s1.tip === ''); }
+
 // 2) spelling check
 const acc = W.byId.get('1-2');
 assert.ok(L.checkSpell(acc, 'Account for') && L.checkSpell(acc, ' account  for ') && !L.checkSpell(acc, 'account'));
 const wtd = W.words.find(e => e.w === 'well-to-do');
 assert.ok(L.checkSpell(wtd, 'well to do') && L.checkSpell(wtd, 'welltodo'));
 assert.ok(!L.checkSpell(acc, ''));
+
+// 2b) writing the Korean meaning: every listed meaning passes as typed, near misses go to the learner's own judgement
+let koItems = 0;
+for (const e of W.words) for (const s of e.senses) for (const it of s.ko.split(/[,;·/]/)) if (it.trim()) { koItems++; assert.ok(L.checkKo(e, it.trim()), 'own meaning accepted: ' + e.w + ' ' + it); }
+const ko = (k, x) => L.checkKo({ senses: [{ ko: k }] }, x);
+assert.ok(ko('정리하다, 청소하다', '정리') && ko('정리하다, 청소하다', '청소하다, 정리하다') && !ko('정리하다, 청소하다', '정리, 요리') && !ko('정리하다', ' '));
+assert.ok(ko('~에 참가하다', '참가하다') && ko('~에 참가하다', '~에 참가하다') && ko('(~에게 ) ~을 알리다', '알리다') && ko('A 를 B 로 바꾸다', '바꾸다'));
+assert.ok(ko('이야기', '이야기') && !ko('이야기', '야기') && ko('은하, 별', '은하') && !ko('~에게 힘을 주다', '주다') && !ko('닫다', '열다'));
+console.log('meanings checked', koItems);
+
+// 2c) pick every meaning: the word's own meanings (2-4) among 6 options, the others from unrelated words
+let multiN = 0;
+for (const e of W.words) {
+  const q = L.makeQuestion(W, e.id, 'multi', true), own = new Set(L.meaningItems(e));
+  if (!L.multiOK(e)) { assert.notStrictEqual(q.t, 'multi', 'one meaning only: ' + e.w); continue; }
+  if (q.t !== 'multi') continue;
+  multiN++;
+  assert.strictEqual(q.opts.length, 6, 'six options ' + e.w);
+  assert.strictEqual(new Set(q.opts).size, 6, 'unique options ' + e.w);
+  assert.ok(q.ans.length >= 2 && q.ans.length <= 4, 'two to four answers ' + e.w);
+  q.opts.forEach((o, i) => assert.strictEqual(q.ans.includes(i), own.has(o), `answer marks ${e.w}: ${o}`));
+}
+assert.ok(multiN > 50, 'multi questions made ' + multiN);
+{ const W3 = L.prepare([[1, 1, 'test', [['try', '시험', 'We test it.', '우리는 그것을 시험한다.', ['We / test it.', '우리는 / 그것을 시험한다'], '', [[0.1, 0.4], [0.4, 1.0]]]]]]);
+  assert.deepStrictEqual(W3.words[0].senses[0].ct, [[0.1, 0.4], [0.4, 1.0]], 'chunk timing read from the row'); }
+console.log('pick-every-meaning questions', multiN);
 
 // 3) lesson simulation: short lessons of 5 new words (+ up to 5 reviews), or 10 reviews
 function runLesson(state, T, pCorrect, opts = {}) {
@@ -205,6 +236,17 @@ function runPlanDay(state, T, pCorrect) {
     const ps = L.planStatus(state, W, T);
     if (ps.finished) return ps;
     const x = ps.steps[ps.next];
+    if (x.kind === 'test') {   // today's writing test on the words learned today, in three blocks
+      const ids = L.shuffle(state.nt.ids.filter(id => state.prog[id])).slice(0, L.DAILY_TEST);
+      const X = L.buildTest(state, W, { range: { t: 'ids', ids }, qt: 'write', hasAudio: true, daily: true }, T);
+      const got = X.steps.map(s => L.makeQuestion(W, s.id, s.qt, true).t), order = ['spell', 'dict', 'kotype'];
+      assert.ok(X.steps.length === x.n && got.every((q, i) => order.includes(q) && (i === 0 || order.indexOf(q) >= order.indexOf(got[i - 1]))), 'daily test: spell, dict, then kotype');
+      assert.ok(X.steps.every((s, i) => !W.byId.get(s.id).pat || got[i] === 'kotype'), 'patterns are asked for their meaning');
+      if (X.steps.length >= 9) assert.strictEqual(new Set(got).size, 3, 'all three formats');
+      while (X.i < X.steps.length) L.answerTest(state, X, Math.random() < pCorrect);
+      L.finishTest(state, X);
+      continue;
+    }
     const { lesson } = runLesson(state, T, pCorrect, { kind: x.kind });
     assert.ok(lesson.newIds.length === x.nNew, 'lesson matches its step');
     assert.ok(++guard <= 60, 'the plan finishes');
@@ -212,7 +254,7 @@ function runPlanDay(state, T, pCorrect) {
 }
 const s6 = L.newState();
 const p0 = L.planStatus(s6, W, T0);
-assert.deepStrictEqual(p0.steps.map(x => x.kind + x.nNew + '/' + x.nRev), ['new5/0', 'new5/0'], 'first day: two new-word lessons');
+assert.deepStrictEqual(p0.steps.map(x => x.kind + x.nNew + '/' + x.nRev), ['new5/0', 'new5/0', 'test0/0'], 'first day: two new-word lessons, then the writing test');
 runPlanDay(s6, T0, 1);
 assert.ok(L.planStatus(s6, W, T0).finished);
 let notes = [], maxDue = 0;
@@ -228,7 +270,7 @@ console.log('plan (10 new a day, all reviews, 80% right):', notes.join(' | '), '
 const s7 = L.newState(); let k7 = 0;
 for (const e of W.words) { if (k7 >= 55) break; s7.prog[e.id] = [4, T0, 3, 0, T0 - 16]; k7++; }
 const p7 = L.planStatus(s7, W, T0);
-assert.deepStrictEqual(p7.steps.map(x => x.kind), ['new', 'new', 'rev']);
+assert.deepStrictEqual(p7.steps.map(x => x.kind), ['new', 'new', 'rev', 'test']);
 assert.ok(p7.steps[2].total === 45 && p7.steps[2].left === 45, 'the review step leaves out the 10 reviews the new-word lessons take');
 // soft drop: a box-4 word missed and then right on the retry comes back in 3 days (box 2), not tomorrow
 const les7 = L.buildLesson(s7, W, T0, { kind: 'rev' });

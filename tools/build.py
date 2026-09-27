@@ -2,7 +2,8 @@
 
 dist/pwa/       phone web app for GitHub Pages: app code in the clear, words and audio AES-GCM encrypted
 dist/artifact/  claude.ai artifact: page content with the words embedded, plain audio packs
-Run with the tts venv python (needs `cryptography`)."""
+The app code is shared with 노랭이 보카 (scratchpad/shared/src); CFG.app below says which app this is.
+Run with the build venv python (needs `cryptography`)."""
 import base64, hashlib, json, os, secrets, shutil, struct, sys
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -10,9 +11,11 @@ from cryptography.hazmat.primitives import hashes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S = os.path.dirname(HERE)
-SRC = os.path.join(HERE, 'src')
+SRC = os.path.join(S, 'shared', 'src')
+sys.path.insert(0, os.path.join(S, 'friend'))
+import pron   # misaki phonemes -> IPA, shared with 노랭이 보카
 DIST = os.path.join(HERE, 'dist')
-VERSION = '2.0.' + os.environ.get('BUILD_N', '1')
+VERSION = '2.1.' + os.environ.get('BUILD_N', '0')
 ITER = 600_000
 
 # ---- words ----
@@ -26,14 +29,32 @@ for d in range(1, 31):
         for r in json.load(open(sp)):
             if (r.get('en') or '').strip() and (d, r['n']) not in NO_EXAMPLE:
                 examples[(d, r['n'], r['si'])] = [r['en'].strip(), (r.get('ko') or '').strip()]
+# 풀이 for each example (howto/out/dayNN.json: {n, si, chunks: [english, korean], tip}) -> sense [.., example, its Korean, chunks, tip]
+howto = {}
+for d in range(1, 31):
+    hp = os.path.join(S, 'howto', 'out', f'day{d:02d}.json')
+    if os.path.exists(hp) and os.environ.get('HOWTO', '1') == '1':
+        for r in json.load(open(hp)): howto[(d, r['n'], r['si'])] = [r['chunks'], r.get('tip') or '']
+EX_AUDIO = os.environ.get('EX_AUDIO', '1') == '1'
+ex_ts_p = os.path.join(S, 'audio', 'ex_ts.json')
+ex_ts = json.load(open(ex_ts_p)) if os.path.exists(ex_ts_p) else {}   # word timestamps of the example clips (tts_ex_ts.py)
+# IPA from the exact phonemes each word clip says (audio/log.json "used", written when the clips were made)
+clip_ps = {i: v['used'] for v in json.load(open(os.path.join(S, 'audio', 'log.json'))).values() for i in v['ids']}
 rows = []
 for d in range(1, 31):
     for e in json.load(open(os.path.join(S, 'final', f'day{d:02d}.json'))):
-        senses = [[(s.get('en') or '').strip(), (s.get('ko') or '').strip()] + examples.get((d, e['n'], si), []) for si, s in enumerate(e['senses'])]
+        senses = []
+        for si, s in enumerate(e['senses']):
+            sense = [(s.get('en') or '').strip(), (s.get('ko') or '').strip()] + examples.get((d, e['n'], si), [])
+            if len(sense) == 4 and (d, e['n'], si) in howto:
+                chunks, tip = howto[(d, e['n'], si)]
+                spans = pron.chunk_spans(chunks[0], ex_ts.get(f"{d}-{e['n']}s{si}")) if EX_AUDIO else None   # where each chunk is in the clip
+                counts = pron.en_counts(chunks[0], sense[2])   # stored as word counts over the example (smaller)
+                sense += [[counts or chunks[0], chunks[1]], tip, spans]
+            senses.append(sense)
         row = [d, e['n'], e['word'].strip(), senses]
         note, fix = (e.get('note') or '').strip(), (e.get('fix') or '').strip()
-        if note or fix: row.append(note)
-        if fix: row.append(fix)
+        row += [note, fix, {'ipa': pron.ipa(clip_ps[f"{d}-{e['n']}"])}]
         rows.append(row)
 assert len(rows) == 1813, len(rows)
 os.makedirs(DIST, exist_ok=True)
@@ -41,18 +62,26 @@ json.dump({'words': rows}, open(os.path.join(DIST, 'rows.json'), 'w'), ensure_as
 days = sorted({r[0] for r in rows})
 
 # ---- audio packs: 'CVA1' | count u16 | count x (n u16, offset u32, length u32) | clips ----
-def pack_day(d):
-    entries = [r for r in rows if r[0] == d]
+# word clip under key n, the example of sense si under n + 10000 * (si + 1)
+def pack(clips):
     blobs, index, off = [], [], 0
-    for r in entries:
-        p = os.path.join(S, 'audio', 'm4a', f'{d}-{r[1]}.m4a')
+    for key, p in clips:
+        if not os.path.exists(p): continue
         b = open(p, 'rb').read()
-        index.append(struct.pack('<HII', r[1], off, len(b)))
-        blobs.append(b)
-        off += len(b)
-    return b'CVA1' + struct.pack('<H', len(entries)) + b''.join(index) + b''.join(blobs)
-packs = {d: pack_day(d) for d in days}
+        index.append(struct.pack('<HII', key, off, len(b))); blobs.append(b); off += len(b)
+    return b'CVA1' + struct.pack('<H', len(index)) + b''.join(index) + b''.join(blobs)
+# dNN: the Day's word clips (downloaded with the app); xNN: its example clips (fetched when that Day is studied)
+packs = {d: pack([(r[1], os.path.join(S, 'audio', 'm4a', f'{d}-{r[1]}.m4a')) for r in rows if r[0] == d]) for d in days}
+xpacks = {d: pack([(r[1] + 10000 * (si + 1), os.path.join(S, 'audio', 'm4a_ex', f'{d}-{r[1]}s{si}.m4a')) for r in rows if r[0] == d for si in range(len(r[3]))]) for d in days} if EX_AUDIO else {}
 AUDIO_V = hashlib.sha256(b''.join(packs[d] for d in days)).hexdigest()[:10]   # changes only when the clips change
+AUDIO_VS = {str(d): hashlib.sha256(packs[d]).hexdigest()[:10] for d in days}   # each Day's own version: an update refetches only the Days that changed
+AUDIO_XS = {str(d): hashlib.sha256(xpacks[d]).hexdigest()[:10] for d in xpacks}
+n_ex = sum(1 for r in rows for si in range(len(r[3])) if EX_AUDIO and os.path.exists(os.path.join(S, 'audio', 'm4a_ex', f'{r[0]}-{r[1]}s{si}.m4a')))
+APP = {'id': 'chorok', 'name': '초록 보카', 'pet': '초록이', 'keys': 'cv2', 'cache': 'cv', 'backup': 'chorok-voca-backup', 'wordsFile': 'chorok-voca', 'v1': 'chorok-voca-v1',
+       'koSay': False, 'paceScope': '책 끝까지',
+       'pace': {'5': '약 1년 · 하루 40~100문제', '10': '약 6개월 · 하루 80~170문제', '15': '약 4개월 · 하루 130~220문제', '20': '약 3개월 · 하루 180~270문제', '30': '약 2개월 · 하루 250~330문제'},
+       'intro': "하루에 새 단어 몇 개씩 할까요? 매일 정한 만큼 새 단어가 나오고, 그날 복습할 단어는 제가 챙겨서 '오늘의 학습'에 넣어 드려요.",
+       'about': 'TOEFL 초록 단어책 Day 01–{last}, {count}단어. 캡처본을 OCR한 뒤 원본 이미지와 한 줄씩 대조해 정리했고, 원문 오타를 고쳤거나 확인이 필요한 단어에는 ※ 메모가 있어요. 예문·해석·풀이는 Claude가 새로 쓰고 따로 한 번 더 검토했어요.'}
 
 # ---- secret (stable across rebuilds) ----
 sec_path = os.path.join(HERE, 'secret.json')
@@ -108,14 +137,23 @@ def build_pwa():
     rev = hashlib.sha256(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()[:12]
     words_bin = seal(json.dumps({'v': 2, 'rev': rev, 'words': rows}, ensure_ascii=False, separators=(',', ':')).encode())
     open(os.path.join(out, 'data', 'words.bin'), 'wb').write(words_bin)
+    tot = xtot = 0
     for d, b in packs.items():
-        open(os.path.join(out, 'data', 'audio', f'd{d:02d}.bin'), 'wb').write(seal(b))
-    cfg = {'mode': 'pwa', 'version': VERSION, 'crypto': {'salt': sec['salt'], 'iter': ITER}, 'data': {'words': 'data/words.bin', 'rev': rev},
-           'audio': {'base': 'data/audio/', 'enc': True, 'v': AUDIO_V, 'days': days}}
+        sealed = seal(b); tot += len(sealed)
+        open(os.path.join(out, 'data', 'audio', f'd{d:02d}.bin'), 'wb').write(sealed)
+    for d, b in xpacks.items():
+        sealed = seal(b); xtot += len(sealed)
+        open(os.path.join(out, 'data', 'audio', f'x{d:02d}.bin'), 'wb').write(sealed)
+    audio = {'base': 'data/audio/', 'enc': True, 'v': AUDIO_V, 'vs': AUDIO_VS, 'days': days, 'mb': max(1, round(tot / 1e6))}
+    if xpacks: audio.update(xs=AUDIO_XS, xmb=max(1, round(xtot / 1e6)))
+    cfg = {'mode': 'pwa', 'version': VERSION, 'app': APP, 'crypto': {'salt': sec['salt'], 'iter': ITER}, 'data': {'words': 'data/words.bin', 'rev': rev}, 'audio': audio}
     html = page(PWA_HEAD, '</head>\n<body>', '</body>\n</html>\n', cfg, '')
     open(os.path.join(out, 'index.html'), 'w').write(html)
     digest = hashlib.sha256(html.encode() + words_bin).hexdigest()[:10]
-    sw = open(os.path.join(SRC, 'sw.js')).read().replace('__VERSION__', VERSION + '-' + digest).replace('__AUDIO_V__', AUDIO_V)
+    keep = json.dumps([f'd{d:02d}.bin?v={AUDIO_VS[str(d)]}' for d in days] + [f'x{d:02d}.bin?v={AUDIO_XS[str(d)]}' for d in xpacks])
+    sw = (open(os.path.join(SRC, 'sw.js')).read().replace('__VERSION__', VERSION + '-' + digest).replace('__CACHE__', APP['cache'])
+          .replace('__AUDIO_KEEP__', keep).replace('__OLD__', json.dumps({'prefixes': ['shell-'], 'names': ['fonts']})))   # v1 left shell-* and fonts
+    assert not any(k in sw for k in ('__VERSION__', '__CACHE__', '__AUDIO_KEEP__', '__OLD__')), "unfilled service worker token"
     open(os.path.join(out, 'sw.js'), 'w').write(sw)
     return out
 
@@ -130,7 +168,8 @@ def build_artifact():
     os.makedirs(os.path.join(out, 'audio'))
     for d, b in packs.items():
         open(os.path.join(out, 'audio', f'd{d:02d}.txt'), 'w').write(base64.b64encode(b).decode())
-    cfg = {'mode': 'artifact', 'version': VERSION, 'audio': {'base': 'audio/', 'enc': False, 'b64': True, 'ext': '.txt', 'days': days}}
+    audio = {'base': 'audio/', 'enc': False, 'b64': True, 'ext': '.txt', 'days': days}   # no example packs here (too big to publish): examples use the device voice
+    cfg = {'mode': 'artifact', 'version': VERSION, 'app': APP, 'audio': audio}
     words_js = 'window.__CV_WORDS__ = ' + json.dumps(rows, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/') + ';'
     html = page('<title>초록 보카</title>', '', '', cfg, words_js, ARTIFACT_CSS)
     open(os.path.join(out, 'chorok-voca.html'), 'w').write(html)
@@ -138,6 +177,6 @@ def build_artifact():
 
 if __name__ == '__main__':
     p = build_pwa(); a = build_artifact()
-    tot = sum(len(b) for b in packs.values())
-    print('built', VERSION, '| words', len(rows), '| examples', len(examples), '| audio packs', len(packs), f'{tot/1e6:.1f} MB', '| pwa', p, '| artifact', a)
+    tot = sum(len(b) for b in packs.values()); xt = sum(len(b) for b in xpacks.values())
+    print('built', VERSION, '| words', len(rows), '| examples', len(examples), '| 풀이', len(howto), '| example clips', n_ex, '| word packs', len(packs), f'{tot/1e6:.1f} MB', '| example packs', len(xpacks), f'{xt/1e6:.1f} MB', '| pwa', p, '| artifact', a)
     print('code', sec['code'][:4] + '-' + sec['code'][4:])

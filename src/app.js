@@ -12,6 +12,11 @@ const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matc
 const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const PWA = CFG.mode === 'pwa';
+// which app this build is: 초록 보카 (TOEFL) or 노랭이 보카 (a beginner's book); both run this same code
+const APP = Object.assign({ id: 'chorok', name: '초록 보카', pet: '초록이', keys: 'cv2', cache: 'cv', backup: 'chorok-voca-backup', wordsFile: '', v1: '',
+  koSay: false, pace: {}, paceScope: '책 끝까지', intro: '', about: '' }, CFG.app || {});
+L.configure({ koSay: APP.koSay });
+if (APP.color) document.documentElement.style.setProperty('--pet', APP.color);
 const vibrate = p => { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} };
 const today = () => L.dayNum();
 const mmss = ms => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + pad2(s % 60); };
@@ -67,7 +72,7 @@ const ring = (size, stroke, parts, track = 'var(--surface-3)') => {
   return `<svg viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${track}" stroke-width="${stroke}"/>${arcs}</svg>`;
 };
 
-function mascot(mood = 'idle', cls = '') {   // 초록이: an original sprout character; CSS picks the face for data-mood
+function mascot(mood = 'idle', cls = '') {   // the app's sprout character (초록이 / 노랭이); CSS picks the face for data-mood
   return `<svg class="mascot ${cls}" data-mood="${mood}" viewBox="0 0 120 120" aria-hidden="true">
   <ellipse class="m-shadow" cx="60" cy="114" rx="30" ry="5"/>
   <g class="m-all">
@@ -92,7 +97,7 @@ function charBubble(inner, mood = 'idle') { return `<div class="qchar">${mascot(
 
 /* ---------- words data ---------- */
 let W = null;
-const K_WORDS = 'cv2-words', K_KEY = 'cv2-key', K_STATE = 'cv2-state', K_AT = 'cv2-at';
+const K_WORDS = APP.keys + '-words', K_KEY = APP.keys + '-key', K_STATE = APP.keys + '-state', K_AT = APP.keys + '-at';   // both apps share one origin: each keeps its own keys
 function storedRows() {
   if (!PWA) return window.__CV_WORDS__ || null;
   try {
@@ -134,7 +139,7 @@ const Local = {
     try {
       const raw = localStorage.getItem(K_STATE);
       if (raw) return JSON.parse(raw);
-      const v1 = localStorage.getItem('chorok-voca-v1');
+      const v1 = APP.v1 && localStorage.getItem(APP.v1);
       if (v1) return L.fromV1(JSON.parse(v1));
     } catch (e) {}
     return null;
@@ -226,14 +231,14 @@ function adoptStored() {
 }
 window.addEventListener('storage', ev => { if (ev.key === K_AT && state && W && Local.at() > (state.at || 0)) adoptStored(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') { pauseTimers(); flush(); if (Cloud.ready) Cloud.flush(); }
-  else { if (Q) Q.t0 = Date.now(); if (state && W && Local.at() > (state.at || 0)) adoptStored(); }
+  if (document.visibilityState === 'hidden') { pauseTimers(); flush(); Sound.release(); if (Cloud.ready) Cloud.flush(); }
+  else { if (Q) Q.t0 = Date.now(); Sound.check(); if (state && W && Local.at() > (state.at || 0)) adoptStored(); }
 });
-window.addEventListener('pagehide', () => { flush(); if (Cloud.ready) Cloud.flush(); });
+window.addEventListener('pagehide', () => { flush(); Sound.release(); if (Cloud.ready) Cloud.flush(); });
 
 /* ---------- sound ---------- */
 const Sound = {
-  _ctx: null, bus: null, vbus: null, primed: false,
+  _ctx: null, bus: null, vbus: null, primed: false, stuck: false,
   ctx() {
     if (this._ctx) return this._ctx;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -244,16 +249,57 @@ const Sound = {
     this.vbus = this._ctx.createGain(); this.vbus.gain.value = 1; this.vbus.connect(master);
     return this._ctx;
   },
-  session() {
-    try { if (navigator.audioSession) navigator.audioSession.type = state && state.settings.silent ? 'playback' : 'auto'; } catch (e) {}
+  // iOS can leave the context "interrupted" (web-audio-api issue 2585) or "running" with a frozen clock after the app
+  // comes back (WebKit bug 263627): resume it on every tap, and make a fresh one when it does not come back
+  reset() {
+    const old = this._ctx;
+    this._ctx = null; this.primed = false;
+    if (old) { try { old.close(); } catch (e) {} }
+    return this.ctx();
+  },
+  wake() {   // called on every tap, inside the user gesture
+    const c = this._ctx;
+    if (!c) return;
+    if (this.stuck || c.state === 'closed') { this.stuck = false; this.reset(); this.unlock(); return; }
+    if (c.state !== 'running') c.resume().catch(() => {});
+  },
+  check() {   // after coming back to the app: a context that is not really running gets replaced on the next tap
+    const c = this._ctx;
+    if (!c) return;
+    const t0 = c.currentTime;
+    setTimeout(() => { if (c === this._ctx && (c.state !== 'running' || c.currentTime === t0)) this.stuck = true; }, 350);
+  },
+  async ready() {   // -> a running context, or null (the next tap replaces a stuck one, inside its user activation)
+    const c = this.ctx();
+    if (!c || this.stuck) return null;
+    if (c.state !== 'running') { try { await Promise.race([c.resume(), sleep(1500)]); } catch (e) {} }
+    if (c.state === 'running') return c;
+    this.stuck = true;
+    return null;
+  },
+  // iOS: 'playback' lets sounds through the silent switch, but while it is set and the context runs, Safari treats the page
+  // as now-playing media and shows it at the top of the screen (w3c/mediasession issue 378). So claim it only while a
+  // sound plays (ms: how long) and hand it back right after.
+  release() { clearTimeout(this.relT); this.relAt = 0; try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch (e) {} },
+  session(ms = 0) {
+    const na = navigator.audioSession;
+    if (!na) return;
+    const want = state && state.settings.silent ? 'playback' : 'auto', until = Date.now() + ms + 1200;
+    try { if (na.type !== want) na.type = want; } catch (e) {}
+    if (until <= (this.relAt || 0)) return;   // a longer sound is still playing: keep its later release
+    this.relAt = until;
+    clearTimeout(this.relT);
+    this.relT = setTimeout(() => { this.relAt = 0; try { na.type = 'auto'; } catch (e) {} }, ms + 1200);
   },
   unlock() {
-    this.session();
     const c = this.ctx();
     if (!c) return;
-    if (c.state === 'suspended') c.resume().catch(() => {});
+    if (c.state !== 'running') c.resume().catch(() => {});
     if (!this.primed) {
       try { const b = c.createBuffer(1, 1, 22050); const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); this.primed = true; } catch (e) {}
+    }
+    if (!this.spoke && 'speechSynthesis' in window) {   // iOS lets the page speak later only after one utterance inside a tap
+      try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); this.spoke = true; } catch (e) {}
     }
   },
   note(f, t, d, o = {}) {
@@ -280,7 +326,8 @@ const Sound = {
     if (!state || !state.settings.sfx) return;
     const c = this.ctx();
     if (!c) return;
-    if (c.state === 'suspended') c.resume().catch(() => {});
+    this.session(1700);
+    if (c.state !== 'running') c.resume().catch(() => {});
     const t = c.currentTime + 0.015, N = (f, at, d, o) => this.note(f, t + at, d, o);
     try {
       if (name === 'right') { N(880, 0, 0.16, { g: 0.2, type: 'triangle' }); N(1318.5, 0.085, 0.3, { g: 0.2, type: 'triangle' }); N(2637, 0.085, 0.14, { g: 0.035 }); }
@@ -318,6 +365,7 @@ function tts(text, lang) {
       const best = v.find(v => /premium|enhanced|neural|natural/i.test(v.name)) || v.find(v => v.lang.replace('_', '-') === lang) || v[0];
       if (best) u.voice = best;
       u.onend = end; u.onerror = end;
+      Sound.session(Math.max(1500, text.length * 110));   // keep the silent-switch-proof session for the whole utterance
       speechSynthesis.speak(u);
       setTimeout(end, 5000);
     } catch (e) { end(); }
@@ -326,13 +374,23 @@ function tts(text, lang) {
 const Voice = {
   packs: new Map(), bufs: new Map(), order: [], cur: null, failed: false, tok: 0,
   available() { return !!(CFG.audio && (!CFG.audio.enc || localStorage.getItem(K_KEY))) && !this.failed; },
-  url(d) { return CFG.audio.base + 'd' + pad2(d) + (CFG.audio.ext || '.bin') + (CFG.audio.enc && CFG.audio.v ? '?v=' + CFG.audio.v : ''); },
-  pack(d) {
-    if (!this.packs.has(d)) {
-      this.packs.set(d, (async () => {
+  // dNN: a Day's word clips; xNN: its example clips (when the build splits them: CFG.audio.xs). Each pack has its own version
+  url(d, x) {
+    const a = CFG.audio, v = x ? a.xs[d] : (a.vs && a.vs[d]) || a.v;
+    return a.base + (x ? 'x' : 'd') + pad2(d) + (a.ext || '.bin') + (a.enc && v ? '?v=' + v : '');
+  },
+  pack(d, x) {
+    x = !!(x && CFG.audio.xs);
+    const pk = (x ? 'x' : 'd') + d;
+    if (x) {   // example packs are big (about 2 MB): keep the 3 used last
+      this.xorder = (this.xorder || []).filter(k => k !== pk); this.xorder.push(pk);
+      while (this.xorder.length > 3) this.packs.delete(this.xorder.shift());
+    }
+    if (!this.packs.has(pk)) {
+      this.packs.set(pk, (async () => {
         let res = null;
-        if (PWA && 'caches' in window) { try { res = await caches.match(new URL(this.url(d), location.href).href); } catch (e) { res = null; } }
-        if (!res) res = await fetch(this.url(d));
+        if (PWA && 'caches' in window) { try { res = await caches.match(new URL(this.url(d, x), location.href).href); } catch (e) { res = null; } }
+        if (!res) res = await fetch(this.url(d, x));
         if (!res.ok) throw new Error('audio ' + res.status);
         let buf;
         if (CFG.audio.b64) {   // claude.ai serves the packs as base64 text
@@ -346,45 +404,140 @@ const Voice = {
         const n = dv.getUint16(4, true), base = 6 + n * 10, index = new Map();
         for (let i = 0, p = 6; i < n; i++, p += 10) index.set(dv.getUint16(p, true), [base + dv.getUint32(p + 2, true), dv.getUint32(p + 6, true)]);
         return { buf, index };
-      })().catch(e => { this.packs.delete(d); throw e; }));
+      })().catch(e => { this.packs.delete(pk); throw e; }));
     }
-    return this.packs.get(d);
+    return this.packs.get(pk);
   },
   preload(ids) { const days = new Set(ids.map(id => W.byId.get(id)).filter(Boolean).map(e => e.d)); for (const d of days) this.pack(d).catch(() => {}); },
-  async buffer(e) {
-    if (this.bufs.has(e.id)) return this.bufs.get(e.id);
-    const p = await this.pack(e.d), ent = p.index.get(e.n);
+  async topUp() {   // word packs missing from the cache (a new version changes their URLs): fetch them again, two at a time
+    if (!CFG.audio || !('caches' in window) || !navigator.onLine) return;
+    const store = await caches.open(APP.cache + '-data').catch(() => null);
+    if (!store) return;
+    const queue = CFG.audio.days.slice();
+    const worker = async () => {
+      while (queue.length) {
+        const url = new URL(this.url(queue.shift()), location.href).href;
+        try { if (!(await store.match(url))) await store.add(url); } catch (e) {}
+      }
+    };
+    await Promise.all([worker(), worker()]);
+  },
+  clipKey(e, si) { return si == null ? e.n : e.n + 10000 * (si + 1); },
+  async slice(e, si) {   // the clip's own m4a bytes
+    const p = await this.pack(e.d, si != null), ent = p.index.get(this.clipKey(e, si));
     if (!ent) throw new Error('no clip');
-    const c = Sound.ctx(), slice = p.buf.slice(ent[0], ent[0] + ent[1]);
+    return p.buf.slice(ent[0], ent[0] + ent[1]);
+  },
+  async buffer(e, si) {
+    const key = e.id + (si == null ? '' : 's' + si);
+    if (this.bufs.has(key)) return this.bufs.get(key);
+    const c = Sound.ctx(), slice = await this.slice(e, si);
     const ab = await new Promise((res, rej) => { const r = c.decodeAudioData(slice, res, rej); if (r && r.then) r.then(res, rej); });
-    this.bufs.set(e.id, ab); this.order.push(e.id);
+    this.bufs.set(key, ab); this.order.push(key);
+    const cap = (k) => k.includes('s') ? 1 : 0, nx = this.order.filter(cap).length;   // sentences are long: keep 12 of them, 90 clips in all
+    if (nx > 12) { const i = this.order.findIndex(cap); this.bufs.delete(this.order[i]); this.order.splice(i, 1); }
     if (this.order.length > 90) this.bufs.delete(this.order.shift());
     return ab;
   },
-  stop() { this.tok++; if (this.cur) { try { this.cur.stop(); } catch (e) {} this.cur = null; } try { speechSynthesis.cancel(); } catch (e) {} },
-  async play(id) {
+  stop() {
+    this.tok++;
+    if (this.cur) { try { this.cur.stop(); } catch (e) {} this.cur = null; }
+    if (this.el && !this.el.paused) { try { this.el.pause(); } catch (e) {} }
+    try { speechSynthesis.cancel(); } catch (e) {}
+  },
+  async playEl(e, si, tok) {   // the same clip through an <audio> element, for when Web Audio is stuck
+    const bytes = await this.slice(e, si);
+    if (tok !== this.tok) return;
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/mp4' })), a = this.el || (this.el = new Audio());
+    try {
+      a.src = url;
+      await Promise.race([a.play(), sleep(3000).then(() => { throw new Error('play timeout'); })]);
+      await new Promise(res => { a.onended = res; a.onerror = res; a.onpause = res; setTimeout(res, 20000); });
+    } finally { a.onended = a.onerror = a.onpause = null; try { a.removeAttribute('src'); a.load(); } catch (e) {} URL.revokeObjectURL(url); }
+  },
+  async playPart(id, si, k) {   // one 풀이 chunk: that stretch of the example clip (word timestamps), else the phone's voice
+    const e = W.byId.get(id), s = e && e.senses[si];
+    if (!s) return;
+    const span = s.ct && s.ct[k];
+    Sound.unlock();
+    this.stop();
+    const tok = this.tok;
+    if (span && this.available()) {
+      try {
+        const c = await Sound.ready();
+        if (tok !== this.tok) return;
+        if (c) {
+          const ab = await this.buffer(e, si);
+          if (tok !== this.tok) return;
+          const from = Math.max(0, span[0] - 0.03), dur = Math.max(0.1, Math.min(ab.duration - from, span[1] - from + 0.06));
+          const src = c.createBufferSource();
+          src.buffer = ab; src.connect(Sound.vbus);
+          Sound.session(dur * 1000);
+          let ended = false; src.onended = () => { ended = true; };
+          src.start(0, from, dur);
+          this.cur = src;
+          const t0 = c.currentTime;
+          await sleep(Math.min(260, dur * 1000));
+          if (tok !== this.tok) return;
+          if (ended || c.currentTime > t0) {
+            if (!ended) await new Promise(res => { src.onended = res; setTimeout(res, Math.max(0, dur * 1000 - 260) + 300); });
+            return;
+          }
+          try { src.stop(); } catch (err) {}
+          this.cur = null;
+          Sound.stuck = true;
+        }
+      } catch (err) { if (tok !== this.tok) return; }
+    }
+    if (tok !== this.tok) return;
+    await tts(s.ch ? s.ch[0].split(/\s*\/\s*/)[k] || '' : '', 'en-US');
+  },
+  async play(id, si) {   // si: the example sentence of that sense instead of the word
     const e = W.byId.get(id);
     if (!e) return;
     Sound.unlock();
     this.stop();
     const tok = this.tok;
-    if (this.available() && Sound.ctx()) {
+    if (this.available()) {
       try {
-        const ab = await this.buffer(e), c = Sound.ctx();
+        const c = await Sound.ready();
         if (tok !== this.tok) return;
-        if (c.state === 'suspended') await c.resume();
-        if (tok !== this.tok) return;
-        const src = c.createBufferSource();
-        src.buffer = ab; src.connect(Sound.vbus); src.start();
-        this.cur = src;
-        await new Promise(res => { src.onended = res; setTimeout(res, ab.duration * 1000 + 400); });
+        if (c) {
+          const ab = await this.buffer(e, si);
+          if (tok !== this.tok) return;
+          const src = c.createBufferSource();
+          src.buffer = ab; src.connect(Sound.vbus);
+          let ended = false; src.onended = () => { ended = true; };
+          Sound.session(ab.duration * 1000);
+          src.start();
+          this.cur = src;
+          const t0 = c.currentTime;
+          await sleep(260);
+          if (tok !== this.tok) return;
+          if (ended || c.currentTime > t0) {
+            if (!ended) await new Promise(res => { src.onended = res; setTimeout(res, Math.max(0, ab.duration * 1000 - 260) + 400); });
+            return;
+          }
+          try { src.stop(); } catch (err) {}
+          this.cur = null;
+          Sound.stuck = true;   // the clock did not move: play this clip another way, and replace the context on the next tap
+        }
+        await this.playEl(e, si, tok);
         return;
-      } catch (err) { if (tok !== this.tok) return; console.warn('[초록 보카] 발음 파일 재생 실패, 기기 음성으로 대신 읽어요', err); }
+      } catch (err) { if (tok !== this.tok) return; console.warn(`[${APP.name}] 발음 파일 재생 실패, 기기 음성으로 대신 읽어요`, err); }
     }
     if (tok !== this.tok) return;
-    await tts(e.w, 'en-US');
+    await tts(si == null ? e.say || e.w : (e.senses[si] && e.senses[si].ex) || '', 'en-US');
   },
 };
+function koSpeak(e, si = 0) { return ((e.senses[si] && e.senses[si].ko) || '').replace(/~/g, '').replace(/\([^)]*\)/g, '').split(',').slice(0, 3).join(', '); }
+async function sayWordThenKo(e, still) {   // English word, then its Korean meaning with the phone's own voice
+  const p = Voice.play(e.id), tok = Voice.tok;
+  await p;
+  if (!state.settings.koSay || (still && !still())) return;
+  await sleep(160);
+  if (Voice.tok === tok && (!still || still())) tts(koSpeak(e), 'ko-KR');
+}
 function sayBtnFeedback(btn) { if (!btn) return; btn.classList.add('playing'); setTimeout(() => btn.classList.remove('playing'), 900); }
 
 /* ---------- ui helpers ---------- */
@@ -441,6 +594,20 @@ function sensesHTML(e, o = {}) {
   return '<ol class="senses">' + e.senses.map((s, i) => '<li>' + (multi ? `<span class="no">${i + 1}</span>` : '') + '<div>' +
     (s.ko ? `<p class="ko">${esc(s.ko)}</p>` : '') + (s.en ? `<p class="en" lang="en"><span class="syn">syn</span>${esc(s.en)}</p>` : '') +
     (o.ex && s.ex ? `<p class="exs" lang="en">${exMarked(e, i)}</p>${s.exKo ? `<p class="exk">${esc(s.exKo)}</p>` : ''}` : '') + '</div></li>').join('') + '</ol>';
+}
+function howtoHTML(e, si = 0) {   // 풀이: the example in meaning chunks with a Korean gloss under each, and a one-line tip
+  const s = e.senses[si] || {};
+  if (!s.ch && !s.tip) return '';
+  const en = s.ch ? s.ch[0].split(/\s*\/\s*/) : [], ko = s.ch ? s.ch[1].split(/\s*\/\s*/) : [];
+  return `<details class="howto"><summary>풀이 보기</summary>${en.length ? `<p class="ckhint">조각을 누르면 그 부분만 들려줘요</p><div class="chunks">${en.map((x, i) => `<button class="ck" type="button" data-act="sayCk" data-id="${e.id}" data-si="${si}" data-k="${i}" aria-label="${esc(x)} 듣기"><b lang="en">${esc(x)}</b><small>${esc(ko[i] || '')}</small></button>`).join('')}</div>` : ''}${s.tip ? `<p class="tip"><b>팁</b>${esc(s.tip)}</p>` : ''}</details>`;
+}
+function cardHTML(e) {   // quick view first: meaning, similar words, example and its Korean; 풀이 folds out. One block per sense
+  const multi = e.senses.length > 1;
+  return e.senses.map((s, i) => '<div class="sense">' +
+    `<div class="kmean">${multi ? `<span class="no">${i + 1}</span>` : ''}<p class="ko">${esc(s.ko || '')}</p><button class="say sm alt" type="button" data-act="sayKo" data-id="${e.id}" data-si="${i}" aria-label="뜻 듣기">${I.speaker}</button></div>` +
+    (s.en ? `<p class="syn2">비슷한 말 <span lang="en">${esc(s.en)}</span></p>` : '') +
+    (s.ex ? `<div class="exbox"><div class="exrow"><p class="exs" lang="en">${exMarked(e, i)}</p><button class="say sm" type="button" data-act="sayEx" data-id="${e.id}" data-si="${i}" aria-label="예문 듣기">${I.speaker}</button></div>${s.exKo ? `<p class="exk">${esc(s.exKo)}</p>` : ''}</div>` : '') +
+    howtoHTML(e, i) + '</div>').join('');
 }
 function exMarked(e, si) {   // the example with the headword in bold
   const p = L.splitEx(e, si);
@@ -506,12 +673,13 @@ function dayCounts(d) {
   return { n: ws.length, m, l };
 }
 function stepLabel(x) {
+  if (x.kind === 'test') return `쓰기 테스트 · 오늘 단어 ${x.n}개`;
   if (x.kind === 'new') return `새 단어 ${x.nNew}개${x.nRev ? ` + 복습 ${x.nRev}개` : ''}`;
   return x.total > x.left ? `복습 ${x.total - x.left}/${x.total}문제` : `복습 ${x.total}문제`;
 }
 // what a daily count means over the whole book: simulated at 80% right (sim_pace.js), rounded
-const PACE = { 5: '약 1년 · 하루 40~100문제', 10: '약 6개월 · 하루 80~170문제', 15: '약 4개월 · 하루 130~220문제', 20: '약 3개월 · 하루 180~270문제', 30: '약 2개월 · 하루 250~330문제' };
-const paceText = n => PACE[n] ? `책 끝까지 ${PACE[n]} (정답률 80% 가정)` : '';
+const PACE = APP.pace || {};
+const paceText = n => PACE[n] ? `${APP.paceScope} ${PACE[n]} (정답률 80% 가정)` : '';
 function renderHome() {
   if (!Q) settleSessions();
   const T = today(), s = state;
@@ -531,12 +699,12 @@ function renderHome() {
   } else if (!ps.finished) {
     const rv = ps.steps.find(x => x.kind === 'rev'), nNew = ps.steps.filter(x => x.kind === 'new').length * L.LESSON_NEW;
     const todayWhat = [nNew ? `새 단어 ${Math.min(nNew, (s.nt && s.nt.ids.length) || nNew)}개` : '', rv ? `복습 ${rv.total}문제` : ''].filter(Boolean).join(' + ');
-    say = (doneN ? `좋아요! ${doneN}/${total} 했어요.` : streak ? `${streak}일 연속 학습 중! 오늘은 ${todayWhat}예요.` : `오늘은 ${todayWhat}예요. 하나씩 해 봐요!`) + `<small>다음: ${nx.kind === 'rev' ? `복습 ${nx.nRev}문제씩 (남은 ${nx.left}문제)` : stepLabel(nx)}</small>`;
-    cta = `<button class="btn" type="button" data-act="planNext">${I.play}${nx.kind === 'rev' ? (nx.total > nx.left ? '복습 이어서' : '복습 시작') + ` · ${nx.nRev}문제` : `${ps.next + 1}단계 시작`}</button>`;
+    say = (doneN ? `좋아요! ${doneN}/${total} 했어요.` : streak ? `${streak}일 연속 학습 중! 오늘은 ${todayWhat}예요.` : `오늘은 ${todayWhat}예요. 하나씩 해 봐요!`) + `<small>다음: ${nx.kind === 'rev' ? `복습 ${nx.nRev}문제씩 (남은 ${nx.left}문제)` : nx.kind === 'test' ? `마무리 쓰기 테스트 (오늘 단어 ${nx.n}개)` : stepLabel(nx)}</small>`;
+    cta = `<button class="btn" type="button" data-act="planNext">${I.play}${nx.kind === 'rev' ? (nx.total > nx.left ? '복습 이어서' : '복습 시작') + ` · ${nx.nRev}문제` : nx.kind === 'test' ? `쓰기 테스트 시작 · ${nx.n}문제` : `${ps.next + 1}단계 시작`}</button>`;
   } else {
     say = `오늘 학습 끝! 정말 잘했어요.<small>${tomorrow ? `내일은 복습 ${tomorrow}개부터 시작해요.` : '내일 또 만나요.'}</small>`; mood = 'happy';
   }
-  const steps = ps.steps.map((x, i) => `<li class="${x.done ? 'done' : i === ps.next ? 'next' : ''}"><i>${x.done ? I.check : i + 1}</i><span>${x.done ? (x.kind === 'new' ? '새 단어 레슨' : '복습 레슨') : stepLabel(x)}</span></li>`).join('');
+  const steps = ps.steps.map((x, i) => `<li class="${x.done ? 'done' : i === ps.next ? 'next' : ''}"><i>${x.done ? I.check : i + 1}</i><span>${x.done ? (x.kind === 'new' ? '새 단어 레슨' : x.kind === 'test' ? '쓰기 테스트' : '복습 레슨') : stepLabel(x)}</span></li>`).join('');
   const more = ps.finished && !lesson ? `<details class="more"><summary>더 공부하기</summary><div class="more-in">
       <button class="btn alt" type="button" data-act="lessonExtra">새 단어 ${L.LESSON_NEW}개 더</button>
       <button class="btn alt" type="button" data-act="tab" data-tab="words">오답노트 · 즐겨찾기 · 듣기 모드</button></div></details>` : '';
@@ -544,7 +712,7 @@ function renderHome() {
   const curId = (s.nt && s.nt.ids.find(id => !s.prog[id])) || L.pickNew(s, W, 1)[0], cur = curId ? W.byId.get(curId).d : null;
   const install = PWA && !standalone && isIOS ? `<div class="banner">${I.share}<span><b>앱처럼 쓰려면</b> 공유 버튼 → ‘홈 화면에 추가’를 누르고 홈 화면 아이콘으로 여세요.</span></div>` : '';
   $('s-home').innerHTML = `<div class="wrap">
-    <div class="topbar"><div class="brand">${mascot('idle')}<span>초록 보카</span></div>
+    <div class="topbar"><div class="brand">${mascot('idle')}<span>${esc(APP.name)}</span></div>
       <div class="tstats"><span class="tchip flame ${met ? 'on' : ''}" title="연속 학습 ${streak}일">${streak ? I.flame : I.flameOff}${streak}</span><button class="ibtn" type="button" data-act="settings" aria-label="설정">${I.gear}</button></div></div>
     ${install}
     <p class="eyebrow" style="margin:-6px 4px -4px">${esc(dateLabel)}</p>
@@ -559,7 +727,7 @@ function renderHome() {
 }
 async function onboard() {
   if (state.onboarded || screen !== 'home') return;
-  const v = await sheet(`${mascot('happy', 'hop')}<h3>안녕하세요! 저는 초록이예요</h3><p>하루에 새 단어 몇 개씩 할까요? 매일 정한 만큼 새 단어가 나오고, 그날 복습할 단어는 제가 챙겨서 '오늘의 학습'에 넣어 드려요.</p>
+  const v = await sheet(`${mascot('happy', 'hop')}<h3>안녕하세요! 저는 ${esc(APP.pet)}예요</h3><p>${esc(APP.intro)}</p>
     <div class="seg" id="obSeg">${[5, 10, 15, 20].map(n => `<button type="button" data-act="obPick" data-v="${n}" aria-pressed="${n === state.settings.daily}">${n}개</button>`).join('')}</div>
     <p class="muted" id="obPace" style="font-size:14px;margin-top:-4px">${esc(paceText(state.settings.daily))}</p>
     <button class="btn" type="button" data-act="sheet" data-v="go">시작하기</button>`);
@@ -585,6 +753,11 @@ function startLesson(opts = {}) {
   }
   Sound.unlock(); Sound.sfx('start');
   run(s);
+}
+function startDailyTest() {   // today's new words in three writing formats (see L.buildTest 'write')
+  const ids = L.shuffle(((state.nt && state.nt.ids) || []).filter(id => state.prog[id] && W.byId.has(id))).slice(0, L.DAILY_TEST);
+  if (!ids.length) { toast('오늘 배운 단어가 아직 없어요'); return; }
+  startTest({ range: { t: 'ids', ids }, qt: 'write', label: '오늘의 쓰기 테스트', daily: true });
 }
 function startTest(spec) {
   const X = L.buildTest(state, W, Object.assign({ hasAudio: Voice.available() }, spec), today());
@@ -628,7 +801,7 @@ const INTRO = {
   'mcq-ko': '영어 단어를 보고 알맞은 뜻을 골라요', 'mcq-en': '한글 뜻을 보고 알맞은 영어 단어를 골라요', syn: '뜻이 가장 가까운 영어 단어(동의어)를 골라요',
   listen: '발음을 듣고 뜻을 골라요. 스피커를 누르면 다시 들려요', spell: "한글 뜻을 보고 영어 단어를 직접 써요. 막히면 '힌트'를 눌러요",
   dict: "발음을 듣고 들리는 단어를 써요. 막히면 '힌트'를 눌러요", cloze: '예문의 빈칸에 들어갈 단어를 골라요', clozet: '예문의 빈칸에 들어갈 단어를 직접 써요. 아래 해석이 힌트예요',
-  ctx: '토플 문제처럼, 문장 속 표시된 단어와 뜻이 가장 가까운 것을 골라요', match: '왼쪽 단어와 오른쪽 뜻을 하나씩 눌러 짝을 맞춰요', card: '카드를 뒤집어 보고, 알았는지 스스로 골라요',
+  ctx: '토플 문제처럼, 문장 속 표시된 단어와 뜻이 가장 가까운 것을 골라요', kotype: '영어 단어를 보고 뜻을 한글로 써요. 비슷하게 써도 돼요', multi: '뜻이 여러 개인 단어예요. 맞는 뜻을 모두 골라서 확인을 눌러요', match: '왼쪽 단어와 오른쪽 뜻을 하나씩 눌러 짝을 맞춰요', card: '카드를 뒤집어 보고, 알았는지 스스로 골라요',
 };
 function introHTML(t) {   // shown once per format
   if (!INTRO[t] || state.seenTypes[t]) return '';
@@ -651,13 +824,19 @@ function renderStep() {
   const q = st.q, say = state.settings.say;
   if (st.k === 'learn') {
     body.innerHTML = `${tagHTML(st)}<div class="lcard"><div class="idx"><span class="hole"></span><span>DAY ${pad2(e.d)}</span><span>·</span><span>No. ${e.n}</span></div>
-      <div class="lword"><span class="w" lang="en">${esc(e.w)}</span><button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button></div>
-      ${sensesHTML(e, { ex: true })}${extrasHTML(e)}</div>`;
+      <div class="lword"><div class="wcol"><span class="w" lang="en">${esc(e.w)}</span>${e.ipa ? `<span class="ipa">${esc(e.ipa)}</span>` : ''}</div>${e.pk ? `<span class="pos">${esc(e.pk)}</span>` : ''}<button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button></div>
+      ${cardHTML(e)}${extrasHTML(e)}</div>`;
     foot.innerHTML = `<button class="btn" type="button" data-act="next">알겠어요</button>`;
-    if (say) Voice.play(e.id);
+    if (say) sayWordThenKo(e, () => curStep() === st);
     return;
   }
   if (q.t === 'card') { renderCardStep(st, e); return; }
+  if (q.t === 'multi') {   // every meaning of the word: toggle them, then 확인
+    body.innerHTML = `${tagHTML(st)}<p class="qprompt">뜻을 모두 고르세요 <span class="qcount">${q.ans.length}개</span></p>${wordHead(e)}<div class="opts multi" role="group">${q.opts.map((o, i) => `<button class="opt" type="button" data-act="mtoggle" data-i="${i}" aria-pressed="false"><span class="k">${i + 1}</span><span>${esc(o)}</span></button>`).join('')}</div>`;
+    foot.innerHTML = `<button class="btn" type="button" data-act="multiGo" id="multiGo" disabled>확인</button>`;
+    if (say) Voice.play(e.id);
+    return;
+  }
   const optsHTML = (en) => `<div class="opts" role="group">${q.opts.map((o, i) => `<button class="opt ${en ? 'en' : ''}" type="button" data-act="pick" data-i="${i}" ${en ? 'lang="en"' : ''}><span class="k">${i + 1}</span><span>${esc(o)}</span></button>`).join('')}</div>`;
   if (q.t === 'mcq-ko') {
     body.innerHTML = `${tagHTML(st)}<p class="qprompt">이 단어의 뜻은?</p>${wordHead(e)}${optsHTML(false)}`;
@@ -676,6 +855,13 @@ function renderStep() {
   } else if (q.t === 'ctx') {
     body.innerHTML = `${tagHTML(st)}<p class="qprompt">문장 속 이 단어와 뜻이 가장 가까운 것은?</p>${charBubble(sentHTML(q.parts, 'mark'))}${optsHTML(true)}`;
     if (say) Voice.play(e.id);
+  } else if (q.t === 'kotype') {
+    body.innerHTML = `${tagHTML(st)}<p class="qprompt">이 단어의 뜻을 한글로 쓰세요</p>${wordHead(e)}
+      <div class="spell"><input id="koIn" type="text" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="비슷하게 써도 돼요" aria-label="뜻 입력"></div>`;
+    foot.innerHTML = `<button class="btn" type="button" data-act="koGo">확인</button>`;
+    if (say) Voice.play(e.id);
+    setTimeout(() => { const i = $('koIn'); if (i) i.focus(); }, 60);
+    return;
   } else if (q.t === 'spell' || q.t === 'clozet' || q.t === 'dict') {
     typeUI(st, e, q);
     return;
@@ -742,6 +928,25 @@ function pick(i) {
   btns.forEach((b, j) => { b.disabled = true; if (j === q.a) b.classList.add('right'); else if (j === i) b.classList.add('wrong'); else b.classList.add('dim'); });
   resolve(ok, st);
 }
+function mtoggle(i) {
+  if (Q.locked) return;
+  const b = document.querySelector(`#qbody .opts.multi .opt[data-i="${i}"]`);
+  if (!b) return;
+  const on = b.getAttribute('aria-pressed') !== 'true';
+  b.setAttribute('aria-pressed', String(on)); b.classList.toggle('sel', on);
+  Sound.sfx('tap');
+  const go = $('multiGo'); if (go) go.disabled = !document.querySelector('#qbody .opts.multi .opt.sel');
+}
+function multiGo() {   // right only when exactly the word's meanings are picked
+  if (Q.locked) return;
+  const st = curStep(), q = st.q, btns = [...document.querySelectorAll('#qbody .opts.multi .opt')];
+  const picked = btns.filter(b => b.classList.contains('sel')).map(b => Number(b.dataset.i));
+  if (!picked.length) return;
+  const want = new Set(q.ans), ok = picked.length === want.size && picked.every(i => want.has(i));
+  Q.locked = true;
+  btns.forEach(b => { const i = Number(b.dataset.i), sel = picked.includes(i); b.disabled = true; b.classList.remove('sel'); b.classList.add(...(want.has(i) ? (sel ? ['right'] : ['right', 'missed']) : [sel ? 'wrong' : 'dim'])); });
+  resolve(ok, st);
+}
 function spellGo() {
   if (Q.locked) return;
   const inp = $('spellIn'); if (!inp) return;
@@ -752,6 +957,23 @@ function spellGo() {
   inp.classList.add(ok ? 'right' : 'wrong');
   inp.readOnly = true;
   inp.blur();
+  resolve(ok, st);
+}
+function koGo() {   // a listed meaning passes at once; anything else is shown next to the meanings for the learner to judge
+  if (!Q || Q.locked) return;
+  const inp = $('koIn'); if (!inp) return;
+  if (!inp.value.trim()) { inp.focus(); return; }
+  const st = curStep(), e = W.byId.get(st.id);
+  Q.locked = true; inp.readOnly = true; inp.blur();
+  if (L.checkKo(e, inp.value)) { inp.classList.add('right'); resolve(true, st); return; }
+  $('fbIn').innerHTML = `<div class="hd"><span>이렇게 써도 맞을까요?</span></div><div class="ans"><div>정답: <b>${esc((e.senses[0] && e.senses[0].ko) || '')}</b></div><div>내가 쓴 답: ${esc(inp.value.trim())}</div></div>
+    <div class="row"><button class="btn alt" type="button" data-act="koSelf" data-v="0" style="flex:1">틀렸어요</button><button class="btn" type="button" data-act="koSelf" data-v="1" style="flex:1">맞았어요</button></div>`;
+  const fb = $('fb'); fb.classList.remove('bad'); fb.classList.add('show');
+}
+function koSelf(ok) {
+  const st = curStep(), inp = $('koIn');
+  hideFb();
+  if (inp) inp.classList.add(ok ? 'right' : 'wrong');
   resolve(ok, st);
 }
 function hint() {   // first a free clue (synonyms, or the meaning when listening), then one more letter each time
@@ -779,12 +1001,13 @@ function showFb(ok, st, res) {
   const e = W.byId.get(st.id), q = st.q;
   const combo = res.combo >= 3 && ok ? ` <span style="font-size:15px;font-weight:700">${res.combo}연속!</span>` : '';
   const head = `<div class="hd"><i>${ok ? I.check : I.x}</i><span>${ok ? PRAISE[Math.floor(Math.random() * PRAISE.length)] : Q.hinted ? '맞았지만 힌트를 썼어요' : '아쉬워요'}${combo}</span>${res.xp ? `<span class="xp">${I.bolt}+${res.xp} XP</span>` : ''}</div>`;
-  let ans = '';
+  let ans = '', shownEx = false;
   const typed = q.t === 'spell' || q.t === 'clozet' || q.t === 'dict', inSent = q.t === 'cloze' || q.t === 'clozet' || q.t === 'ctx';
-  if (!ok || typed || inSent || q.t === 'listen') {
-    const right = q.t === 'mcq-ko' || q.t === 'listen' ? e.senses[q.si].ko : q.t === 'syn' || q.t === 'ctx' ? q.opts[q.a] : e.w;
+  if (!ok || typed || inSent || q.t === 'listen' || q.t === 'kotype') {
+    const right = q.t === 'multi' ? q.ans.map(i => q.opts[i]).join(' · ') : q.t === 'mcq-ko' || q.t === 'listen' || q.t === 'kotype' ? e.senses[q.si].ko : q.t === 'syn' || q.t === 'ctx' ? q.opts[q.a] : e.w;
     const si = q.si != null ? q.si : 0, sense = e.senses[si] || {};
-    const ex = sense.ex && (inSent || !ok) ? `<div class="ex"><p lang="en">${exMarked(e, si)}</p>${sense.exKo ? `<small>${esc(sense.exKo)}</small>` : ''}</div>` : '';
+    const ex = sense.ex && (inSent || !ok) ? `<div class="ex"><div class="exrow"><p lang="en">${exMarked(e, si)}</p><button class="say sm" type="button" data-act="sayEx" data-id="${e.id}" data-si="${si}" aria-label="예문 듣기">${I.speaker}</button></div>${sense.exKo ? `<small>${esc(sense.exKo)}</small>` : ''}${!ok ? howtoHTML(e, si) : ''}</div>` : '';
+    shownEx = !!ex;
     ans = `<div class="ans">${!ok && !typed && q.t !== 'card' ? `<div>정답: <b>${esc(right)}</b></div>` : ''}<div><span class="w" lang="en">${esc(e.w)}</span> <span class="m">${esc(meaningLine(e))}</span></div>${ex}</div>`;
   }
   $('fbIn').innerHTML = head + ans + `<button class="btn ${ok ? '' : 'bad'}" type="button" data-act="cont">계속</button>`;
@@ -792,8 +1015,8 @@ function showFb(ok, st, res) {
   fb.classList.toggle('bad', !ok);
   fb.classList.add('show');
   $('qfoot').innerHTML = '';
-  if ((!ok || typed || q.t === 'listen' || q.t === 'mcq-en' || q.t === 'cloze') && state.settings.say) Voice.play(e.id);
-  if (ok) Q.autoT = setTimeout(cont, inSent ? 2400 : typed || q.t === 'listen' || q.t === 'mcq-en' ? 1500 : 1000);
+  if ((!ok || typed || q.t === 'listen' || q.t === 'mcq-en' || q.t === 'cloze') && state.settings.say) { if (!ok) sayWordThenKo(e, () => $('fb').classList.contains('show')); else Voice.play(e.id); }
+  if (ok && !shownEx) Q.autoT = setTimeout(cont, typed || q.t === 'listen' || q.t === 'mcq-en' || q.t === 'kotype' ? 1500 : 1000);   // with a translation to read, wait for 계속
 }
 function hideFb() { const fb = $('fb'); if (fb) fb.classList.remove('show', 'bad'); }
 function cont() { if (!Q) return; clearTimeout(Q.autoT); Sound.sfx('next'); renderStep(); }
@@ -849,7 +1072,7 @@ function renderLessonResult(s, r) {
       <div class="rs blue"><small>시간</small><b>${mmss(s.stat.ms)}</b></div>
     </div>
     <div class="streakbig">${streak ? I.flame : I.flameOff}<span><b>${streak ? streak + '일 연속 학습!' : '오늘도 해냈어요'}</b><small>오늘 ${fmt(ds.xp)} XP</small></span></div>
-    ${!ps.finished ? `<button class="btn" type="button" data-act="planNext">${I.play}${nx.kind === 'rev' ? `복습 계속 · ${nx.nRev}문제` : `다음 · ${stepLabel(nx)}`}</button>
+    ${!ps.finished ? `<button class="btn" type="button" data-act="planNext">${I.play}${nx.kind === 'rev' ? `복습 계속 · ${nx.nRev}문제` : nx.kind === 'test' ? `쓰기 테스트 · ${nx.n}문제` : `다음 · ${stepLabel(nx)}`}</button>
     <button class="btn alt" type="button" data-act="tab" data-tab="home">오늘은 여기까지</button>` : `<button class="btn" type="button" data-act="tab" data-tab="home">홈으로</button>`}
     ${failed.length ? `<div class="sec" style="width:100%"><h2>틀린 단어</h2><span>${failed.length}개 · 내일 다시 나와요</span></div><ul class="panel wlist">${failed.map(id => rowHTML(W.byId.get(id))).join('')}</ul>
     <button class="btn alt" type="button" data-act="browseIds" data-ids="${failed.join(',')}" data-label="틀린 단어">틀린 단어 카드로 보기</button>` : ''}
@@ -871,7 +1094,7 @@ function renderTestResult(X, r) {
     </div>
     ${r.wrongIds.length ? `<div class="sec" style="width:100%"><h2>틀린 단어</h2><span>${r.wrongIds.length}개 · 오답노트에 담았어요${r.wrongIds.filter(id => state.prog[id]).length ? ' · 배운 단어는 내일 복습' : ''}</span></div><ul class="panel wlist">${r.wrongIds.map(id => rowHTML(W.byId.get(id))).join('')}</ul>
       <button class="btn" type="button" data-act="retryWrong" data-ids="${r.wrongIds.join(',')}">${I.retry}틀린 문제 다시 풀기</button>` : ''}
-    <button class="btn ${r.wrongIds.length ? 'alt' : ''}" type="button" data-act="tab" data-tab="test">테스트 목록으로</button>
+    ${X.spec.daily ? `<button class="btn ${r.wrongIds.length ? 'alt' : ''}" type="button" data-act="tab" data-tab="home">홈으로</button>` : `<button class="btn ${r.wrongIds.length ? 'alt' : ''}" type="button" data-act="tab" data-tab="test">테스트 목록으로</button>`}
   </div>`;
   countUp($('rxp'), X.stat.xp);
 }
@@ -880,13 +1103,12 @@ function renderTestResult(X, r) {
 let drag = null, flipped = false, busy = false;
 function faceFront(e) {
   const idx = `<div class="idx"><span class="hole"></span><span>DAY ${pad2(e.d)}</span><span>·</span><span>No. ${e.n}</span></div>`;
-  const say = `<button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button>`;
   if (state.settings.front === 'ko') return idx + `<div class="fk">${e.senses.map((s, i) => `<p>${e.senses.length > 1 ? `<small class="mono" style="display:block;font-size:12px;color:var(--green)">${i + 1}</small>` : ''}${esc(s.ko || s.en)}</p>`).join('')}</div><p class="hint">탭해서 단어 보기</p>`;
-  return idx + say + `<div class="fw ${e.w.length > 13 ? 'long' : ''}" lang="en">${esc(e.w)}</div><p class="hint">탭해서 뜻 보기</p>`;
+  return idx + `<button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button><div class="fw ${e.w.length > 13 ? 'long' : ''}" lang="en">${esc(e.w)}</div><p class="hint">탭해서 뜻 보기</p>`;
 }
 function faceBack(e) {
   return `<div class="idx"><span class="hole"></span><span>DAY ${pad2(e.d)}</span><span>·</span><span>No. ${e.n}</span></div><button class="say" type="button" data-act="say" data-id="${e.id}" aria-label="발음 듣기">${I.speaker}</button>
-    <div class="lword" style="padding-right:48px"><span class="w" lang="en">${esc(e.w)}</span></div>${sensesHTML(e, { ex: true })}${extrasHTML(e)}`;
+    <div class="lword" style="padding-right:48px"><div class="wcol"><span class="w" lang="en">${esc(e.w)}</span>${e.ipa ? `<span class="ipa">${esc(e.ipa)}</span>` : ''}</div></div>${cardHTML(e)}${extrasHTML(e)}`;
 }
 function stageHTML(e, n) {
   return `<div class="stage" id="stage">${n > 1 ? '<div class="deck d2"></div>' : ''}${n > 0 ? '<div class="deck d1"></div>' : ''}
@@ -911,7 +1133,7 @@ function flip() {
   flipped = !flipped;
   c.classList.toggle('flipped', flipped);
   Sound.sfx('flip');
-  if (flipped && state.settings.front === 'ko' && state.settings.say) { const el = c.querySelector('[data-id]'); if (el) Voice.play(el.dataset.id); }
+  if (flipped && state.settings.front === 'ko' && state.settings.say) { const el = c.querySelector('.face.back > .say'); if (el) Voice.play(el.dataset.id); }
 }
 function flyOut(dir, done) {
   const d = $('drag');
@@ -927,7 +1149,7 @@ function bindDrag(onSwipe) {
   const el = $('drag');
   if (!el) return;
   el.addEventListener('pointerdown', ev => {
-    if (busy || (ev.button && ev.button > 0) || ev.target.closest('[data-act]')) return;
+    if (busy || (ev.button && ev.button > 0) || ev.target.closest('[data-act], summary, details')) return;
     drag = { x: ev.clientX, y: ev.clientY, id: ev.pointerId, dx: 0, t: performance.now(), moved: false };
   });
   el.addEventListener('pointermove', ev => {
@@ -1028,7 +1250,7 @@ function renderAuto() {
     </div>
     <div class="panel set">
       <div class="sr"><div class="t"><b>반복</b><span class="d">단어를 몇 번 읽을지</span></div><div class="seg">${[1, 2, 3].map(n => `<button type="button" data-act="autoRepeat" data-v="${n}" aria-pressed="${st.repeat === n}">${n}번</button>`).join('')}</div></div>
-      <div class="sr"><div class="t"><b>한국어 뜻 읽기</b><span class="d">기기 음성으로 뜻도 읽어요</span></div><label class="switch"><input type="checkbox" data-set="koSay" ${st.koSay ? 'checked' : ''} aria-label="한국어 뜻 읽기"><i></i></label></div>
+      <div class="sr"><div class="t"><b>한국어 뜻 읽기</b><span class="d">카드에서 영어 발음 다음에 한글 뜻도 읽어 줘요</span></div><label class="switch"><input type="checkbox" data-set="koSay" ${st.koSay ? 'checked' : ''} aria-label="한국어 뜻 읽기"><i></i></label></div>
     </div>
     <p class="hint">화면이 켜져 있는 동안 계속 재생돼요</p>
   </div>`;
@@ -1124,11 +1346,11 @@ function tbIds() {
   const r = TB.range === 'days' ? { t: 'days', days: TB.days } : { t: TB.range };
   return L.rangeIds(state, W, r, today());
 }
-const QT = [['mix', '섞어서'], ['mcq-ko', '뜻 고르기'], ['mcq-en', '단어 고르기'], ['syn', '동의어'], ['cloze', '예문 빈칸'], ['ctx', '문장 속 뜻'], ['listen', '듣기'], ['spell', '한글 보고 쓰기'], ['dict', '받아쓰기']];
+const QT = [['mix', '섞어서'], ['mcq-ko', '뜻 고르기'], ['mcq-en', '단어 고르기'], ['syn', '동의어'], ['cloze', '예문 빈칸'], ['ctx', '문장 속 뜻'], ['listen', '듣기'], ['spell', '한글 보고 쓰기'], ['dict', '받아쓰기'], ['kotype', '뜻 쓰기'], ['multi', '뜻 모두 고르기'], ['write', '쓰기 섞어서']];
 function renderTest() {
   if (!Q) settleSessions();
   TB = TB || tbDefaults();
-  const ids = tbIds(), n = TB.count ? Math.min(TB.count, ids.length) : ids.length;
+  const ids = tbIds().filter(id => TB.qt !== 'multi' || L.multiOK(W.byId.get(id))), n = TB.count ? Math.min(TB.count, ids.length) : ids.length;   // 뜻 모두 고르기: words with several meanings
   const stars = W.words.filter(e => state.stars[e.id]).length, wrong = W.words.filter(e => state.wrong[e.id]).length, learned = Object.keys(state.prog).length;
   const X = state.test && state.test.i < state.test.steps.length ? state.test : null;
   const hist = state.tests.slice(0, 12).map((t, i) => {
@@ -1224,7 +1446,7 @@ function renderSettings() {
     <div class="panel set">
       <div class="sr"><div class="t"><b>효과음</b><span class="d">정답·오답·완료 소리</span></div>${swHTML('sfx', '효과음')}</div>
       <div class="sr"><div class="t"><b>발음 자동 재생</b><span class="d">단어가 나오면 바로 읽어 주기</span></div>${swHTML('say', '발음 자동 재생')}</div>
-      <div class="sr"><div class="t"><b>무음 모드에서도 소리</b><span class="d">아이폰 무음 스위치를 켜도 들려요. 끄면 다른 음악과 같이 들을 수 있어요.</span></div>${swHTML('silent', '무음 모드에서도 소리')}</div>
+      <div class="sr"><div class="t"><b>무음 모드에서도 소리</b><span class="d">아이폰 무음 스위치를 켜도 들려요. 소리가 나는 동안만 화면 위에 재생 표시가 떠요. 끄면 무음일 땐 조용하고 다른 음악과 같이 들을 수 있어요.</span></div>${swHTML('silent', '무음 모드에서도 소리')}</div>
       ${PWA && !localStorage.getItem(K_KEY) ? `<div class="sr"><div class="t"><b>AI 발음 받기</b><span class="d">코드를 입력하면 자연스러운 발음 파일을 받아요</span></div><button class="btn sm" type="button" data-act="codeAgain">${I.lock}코드 입력</button></div>` : ''}
       <div class="sr"><div class="t"><b>소리 확인</b><span class="d">${Voice.available() ? 'AI 음성(Kokoro) 발음 파일' : '기기 음성으로 읽어요'}</span></div><button class="btn sm alt" type="button" data-act="soundTest">${I.speaker}들어보기</button></div>
     </div>
@@ -1236,21 +1458,21 @@ function renderSettings() {
       <div class="sr"><div class="t"><b>백업 불러오기</b><span class="d">백업 파일로 기록 되돌리기</span></div><button class="btn sm alt" type="button" data-act="restore">${I.upload}불러오기</button></div>
       <div class="sr"><div class="t"><b>학습 기록 초기화</b><span class="d">진도, 연속 기록, 시험 기록을 모두 지워요</span></div><button class="btn sm bad" type="button" data-act="reset">초기화</button></div>
     </div>
-    <p class="about"><b>단어</b> · TOEFL 초록 단어책 Day 01–${pad2(W.days[W.days.length - 1])}, ${fmt(W.words.length)}단어. 캡처본을 OCR한 뒤 원본 이미지와 한 줄씩 대조해 정리했고, 원문 오타를 고쳤거나 확인이 필요한 단어에는 ※ 메모가 있어요.<br>
-    <b>발음</b> · 오픈소스 음성 AI Kokoro-82M(Apache-2.0)으로 만든 미국식 발음이에요. 명사·동사에 따라 강세가 달라지는 단어는 뜻에 맞춰 골랐어요.<br>
+    <p class="about"><b>단어</b> · ${esc(APP.about).replace('{last}', pad2(W.days[W.days.length - 1])).replace('{count}', fmt(W.words.length))}<br>
+    <b>발음</b> · 오픈소스 음성 AI Kokoro-82M(Apache-2.0)으로 만든 미국식 발음이에요. 명사·동사에 따라 강세가 달라지는 단어는 뜻에 맞춰 골랐고, 발음기호도 그 소리와 같은 발음 데이터로 만든 미국식이에요.<br>
     <b>복습 간격</b> · 맞힐 때마다 1 → 3 → 7 → 16 → 35 → 80 → 180일로 늘어나고, 틀리면 그 자리에서 다시 나온 뒤 다음 날 또 복습해요. 35일 간격에 도달하면 ‘암기 완료’예요. 하루는 새벽 4시에 바뀌어요.<br>
     <span class="mono" style="font-size:11.5px">v${esc(CFG.version || '2')}</span></p>
   </div>`;
 }
 async function backup() {
-  const json = JSON.stringify({ app: 'chorok-voca-backup', v: 2, at: new Date().toISOString(), state });
-  const name = 'chorok-voca-backup-' + L.dayKey(today()) + '.json';
+  const json = JSON.stringify({ app: APP.backup, v: 2, at: new Date().toISOString(), state });
+  const name = APP.backup + '-' + L.dayKey(today()) + '.json';
   if (!PWA && window.claude && window.claude.use) {
     try { const dl = await window.claude.use('downloads'); if (dl) { await dl.save({ filename: name, data: json }); toast('백업 파일을 저장했어요'); return; } } catch (e) {}
   }
   try {
     const file = new File([json], name, { type: 'application/json' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: '초록 보카 백업' }); toast('백업 파일을 만들었어요'); return; }
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: APP.name + ' 백업' }); toast('백업 파일을 만들었어요'); return; }
   } catch (e) { if (e && e.name === 'AbortError') return; }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
@@ -1266,15 +1488,15 @@ $('filePick').addEventListener('change', async ev => {
   let o;
   try { o = JSON.parse(await f.text()); } catch (e) { toast('JSON 파일이 아니에요'); return; }
   if (pickPurpose === 'restore') {
-    const src = o && o.app === 'chorok-voca-backup' ? (o.state || (o.prog ? L.fromV1({ prog: o.prog, meta: o.meta }) : null)) : null;
-    if (!src) { toast('초록 보카 백업 파일이 아니에요'); return; }
+    const src = o && o.app === APP.backup ? (o.state || (o.prog ? L.fromV1({ prog: o.prog, meta: o.meta }) : null)) : null;
+    if (!src) { toast(APP.name + ' 백업 파일이 아니에요'); return; }
     const okGo = await confirmSheet('백업으로 되돌릴까요?', '지금 기록은 백업 파일의 기록으로 바뀌어요.', '되돌리기', '취소');
     if (!okGo) return;
     state = L.sanitize(src, W); save(); flush(); applyTheme();
     toast('기록을 되돌렸어요'); go('home');
   } else if (pickPurpose === 'words') {
-    const rows = o && o.app === 'chorok-voca' && Array.isArray(o.words) ? o.words : null;
-    if (!rows) { unlockMsg('초록 보카 단어 파일이 아니에요', true); return; }
+    const rows = APP.wordsFile && o && o.app === APP.wordsFile && Array.isArray(o.words) ? o.words : null;
+    if (!rows) { unlockMsg(APP.name + ' 단어 파일이 아니에요', true); return; }
     localStorage.setItem(K_WORDS, JSON.stringify({ v: o.v || 1, words: rows }));
     startApp(rows);
   }
@@ -1284,14 +1506,14 @@ $('filePick').addEventListener('change', async ev => {
 function renderUnlock() {
   $('s-unlock').innerHTML = `<div class="wrap unlock">
     ${mascot('happy', 'float')}
-    <h1>초록 보카</h1>
-    <p>처음 한 번만 받은 <b>8자리 코드</b>를 입력하세요.<br>단어와 발음을 이 폰에 내려받아요 (약 16MB).</p>
-    ${!standalone && isIOS ? `<div class="banner">${I.share}<span><b>먼저 홈 화면에 추가하세요.</b> Chrome 주소창 오른쪽 공유 버튼 → ‘홈 화면에 추가’ 후, 홈 화면의 초록 보카 아이콘으로 열어서 코드를 넣어야 앱에 저장돼요.</span></div>` : ''}
+    <h1>${esc(APP.name)}</h1>
+    <p>처음 한 번만 받은 <b>8자리 코드</b>를 입력하세요.<br>단어와 발음을 이 폰에 내려받아요 (약 ${CFG.audio && CFG.audio.mb ? CFG.audio.mb : 20}MB${CFG.audio && CFG.audio.xs ? ` · 예문 소리 ${CFG.audio.xmb || ''}MB는 그 Day를 공부할 때 받아요` : ''}).</p>
+    ${!standalone && isIOS ? `<div class="banner">${I.share}<span><b>먼저 홈 화면에 추가하세요.</b> Chrome 주소창 오른쪽 공유 버튼 → ‘홈 화면에 추가’ 후, 홈 화면의 ${esc(APP.name)} 아이콘으로 열어서 코드를 넣어야 앱에 저장돼요.</span></div>` : ''}
     <input class="code" id="codeIn" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="XXXX-XXXX" aria-label="8자리 코드">
     <div class="prog" id="unlockProg" hidden><i></i></div>
     <p class="msg" id="unlockMsg" hidden></p>
     <button class="btn" type="button" data-act="unlock" id="unlockBtn">${I.lock}시작하기</button>
-    <button class="link" type="button" data-act="wordsFile">코드 대신 단어 파일로 불러오기</button>
+    ${APP.wordsFile ? '<button class="link" type="button" data-act="wordsFile">코드 대신 단어 파일로 불러오기</button>' : ''}
     ${W ? '<button class="link" type="button" data-act="settings">돌아가기</button>' : ''}
   </div>`;
   const inp = $('codeIn');
@@ -1322,7 +1544,7 @@ async function unlock() {
     let done = 0;
     unlockMsg(`발음 받는 중… 0/${days.length}`); unlockProg(0.1);
     const queue = days.slice();
-    const store = 'caches' in window ? await caches.open('cv-data').catch(() => null) : null;   // the service worker may not control the page yet on the first launch
+    const store = 'caches' in window ? await caches.open(APP.cache + '-data').catch(() => null) : null;   // the service worker may not control the page yet on the first launch
     const worker = async () => {
       while (queue.length) {
         const d = queue.shift(), url = new URL(Voice.url(d), location.href).href;
@@ -1356,12 +1578,15 @@ const ACT = {
   starList: () => go('day', { t: 'stars', from: screen }),
   wrongList: () => go('day', { t: 'wrong', from: screen }),
   say: el => { sayBtnFeedback(el); Voice.play(el.dataset.id); },
+  sayEx: el => { sayBtnFeedback(el); if (Q) clearTimeout(Q.autoT); Voice.play(el.dataset.id, Number(el.dataset.si) || 0); },
+  sayCk: el => { sayBtnFeedback(el); if (Q) clearTimeout(Q.autoT); Voice.playPart(el.dataset.id, Number(el.dataset.si) || 0, Number(el.dataset.k) || 0); },
+  sayKo: el => { sayBtnFeedback(el); const e = W.byId.get(el.dataset.id); if (e) { Voice.stop(); tts(koSpeak(e, Number(el.dataset.si) || 0), 'ko-KR'); } },
   star: el => toggleStar(el.dataset.id, el),
   lesson: () => startLesson(),
   lessonExtra: () => startLesson({ extra: L.LESSON_NEW }),
   lessonMore: () => startLesson({ more: true }),
   lessonRev: () => startLesson({ more: true, kind: 'rev' }),
-  planNext: () => startLesson({ more: true }),
+  planNext: () => { const ps = L.planStatus(state, W, today()), x = ps.steps[ps.next]; if (x && x.kind === 'test') startDailyTest(); else startLesson({ more: true }); },
   next: () => nextLearn(),
   pick: el => pick(Number(el.dataset.i)),
   mpick: el => mpick(el),
@@ -1369,6 +1594,10 @@ const ACT = {
   quit: () => quitRun(),
   hint: () => hint(),
   spellGo: () => spellGo(),
+  koGo: () => koGo(),
+  mtoggle: el => mtoggle(Number(el.dataset.i)),
+  multiGo: () => multiGo(),
+  koSelf: el => koSelf(el.dataset.v === '1'),
   cardKnow: () => cardAnswer(true),
   cardDont: () => cardAnswer(false),
   sheet: el => closeSheet(el.dataset.v),
@@ -1439,14 +1668,20 @@ document.addEventListener('change', ev => {
   if (k === 'silent') Sound.session();
   save();
 });
-document.addEventListener('pointerdown', () => Sound.unlock(), { capture: true, passive: true });
+// every tap: resume Web Audio (or replace a stuck context) inside the user activation; touchend and click count as one
+const tapAudio = () => { Sound.wake(); Sound.unlock(); };
+document.addEventListener('touchend', tapAudio, { capture: true, passive: true });
+document.addEventListener('click', tapAudio, { capture: true, passive: true });
 document.addEventListener('keydown', ev => {
   if (!$('sheet').hidden) { if (ev.key === 'Escape') closeSheet(null); return; }
   const inField = ev.target.closest && ev.target.closest('input,select,textarea');
   if (screen === 'quiz' && Q) {
     if (ev.repeat && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); return; }
     const st = curStep(), fbOpen = $('fb').classList.contains('show');
-    if (inField) { if (ev.key === 'Enter' && ev.target.id === 'spellIn') { ev.preventDefault(); fbOpen ? cont() : spellGo(); } return; }
+    if (inField) {
+      if (ev.key === 'Enter' && !ev.isComposing && (ev.target.id === 'spellIn' || ev.target.id === 'koIn')) { ev.preventDefault(); if (fbOpen) { if (!document.querySelector('#fbIn [data-act="koSelf"]')) cont(); } else if (ev.target.id === 'koIn') koGo(); else spellGo(); }
+      return;
+    }
     if (fbOpen) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); cont(); } return; }
     if (!st) return;
     if (st.k === 'learn') { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); nextLearn(); } }
@@ -1454,7 +1689,8 @@ document.addEventListener('keydown', ev => {
       if (ev.key === ' ' || ev.key === 'Enter') { ev.preventDefault(); flip(); }
       else if (ev.key === 'ArrowRight') cardAnswer(true);
       else if (ev.key === 'ArrowLeft') cardAnswer(false);
-    } else if (st.q && st.q.opts && /^[1-4]$/.test(ev.key)) pick(Number(ev.key) - 1);
+    } else if (st.q && st.q.t === 'multi') { if (/^[1-6]$/.test(ev.key)) mtoggle(Number(ev.key) - 1); else if (ev.key === 'Enter') { ev.preventDefault(); multiGo(); } }
+    else if (st.q && st.q.opts && /^[1-4]$/.test(ev.key)) pick(Number(ev.key) - 1);
     if ((ev.key === 's' || ev.key === 'S') && st.q && !['mcq-en', 'spell', 'cloze', 'clozet'].includes(st.q.t)) Voice.play(st.id);
     if (ev.key === 'Escape') quitRun();
     return;
@@ -1503,6 +1739,7 @@ function startApp(rows) {
   applyTheme();
   go('home');
   if (PWA && CFG.data && CFG.data.rev && storedRev() !== CFG.data.rev && localStorage.getItem(K_KEY)) refreshWords();
+  if (PWA && localStorage.getItem(K_KEY)) setTimeout(() => Voice.topUp(), 4000);
   if (!PWA) {
     Cloud.connect().then(cloud => {
       if (!Cloud.ready) return;
@@ -1510,7 +1747,7 @@ function startApp(rows) {
       Local.write(state);
       Cloud.flush();
       if (screen === 'home') renderHome(); else if (screen === 'settings') renderSettings();
-    }).catch(e => console.warn('[초록 보카] 계정 저장소 연결 실패, 이 브라우저에 저장해요', e));
+    }).catch(e => console.warn(`[${APP.name}] 계정 저장소 연결 실패, 이 브라우저에 저장해요`, e));
   }
 }
 function boot() {

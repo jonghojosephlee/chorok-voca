@@ -191,7 +191,7 @@ const Logic = (() => {
 
   /* ---------- state ---------- */
   function defaultSettings() {
-    return { daily: 10, lessons: 3, goal: 50, start: 1, review: 'quiz', spell: true, sfx: true, say: true, silent: true, koSay: false, repeat: 2, front: 'en', theme: 'system' };
+    return { daily: 10, goal: 50, start: 1, review: 'quiz', spell: true, sfx: true, say: true, silent: true, koSay: false, repeat: 2, front: 'en', theme: 'system' };
   }
   function newState() {
     return { v: 2, prog: {}, stars: {}, wrong: {}, days: {}, tests: [], nt: null, best: 0, xpTotal: 0, settings: defaultSettings(), session: null, spots: {} };
@@ -267,45 +267,38 @@ const Logic = (() => {
     const newLeft = planned.filter(id => !state.prog[id] || state.prog[id][1] <= T);
     return { T, planned, rev, newLeft: newLeft.length, newIds: newLeft };
   }
-  // Today's plan: a fixed list of short lessons, made once a day. Due reviews come first and new words only get the lessons
-  // that are left, so a review backlog slows new words down (the Anki manual's advice) and whatever does not fit waits for tomorrow.
+  // Today's plan: the new words you chose for the day (5 per lesson, each lesson also clears 5 reviews), then every review
+  // still due, done 10 at a time. Nothing is cut or pushed to tomorrow, so the pace is exactly the daily count you picked.
   function dayPlan(state, W, T) {
-    if (state.today && state.today.d === T) return state.today;
+    if (state.today && state.today.d === T && state.today.v === 2) return state.today;
     ensurePlan(state, W, T);
     const ntSet = new Set(state.nt.ids);
     let R = 0;
     for (const e of W.words) { const p = state.prog[e.id]; if (p && p[1] <= T && !ntSet.has(e.id)) R++; }
     R += state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T).length;
-    const cap = Math.max(1, state.settings.lessons || 3);
-    const fresh = state.nt.ids.filter(id => !state.prog[id]);
-    const lessonsFor = n => n + Math.ceil(Math.max(0, R - n * LESSON_REV) / REVIEW_LESSON);
-    let nNew = Math.ceil(fresh.length / LESSON_NEW);
-    const floor = Math.min(nNew, cap, Math.ceil((state.settings.minNew || 0) / LESSON_NEW));   // new words kept even with a backlog
-    while (nNew > floor && lessonsFor(nNew) > cap) nNew--;
-    const nRev = Math.min(cap - nNew, Math.ceil(Math.max(0, R - nNew * LESSON_REV) / REVIEW_LESSON));
-    state.nt.ids = state.nt.ids.filter(id => state.prog[id]).concat(fresh.slice(0, nNew * LESSON_NEW));   // the rest wait for another day
-    const d = state.days[dayKey(T)];
-    state.today = { d: T, steps: Array(nRev).fill('rev').concat(Array(nNew).fill('new')), base: (d && d.lessons) || 0, cut: fresh.length - nNew * LESSON_NEW };
+    state.today = { v: 2, d: T, rev0: R };
     return state.today;
   }
-  function planStatus(state, W, T) {   // the plan's steps with what each will hold now; done steps first
-    const P = dayPlan(state, W, T), d = state.days[dayKey(T)];
-    const done = Math.max(0, ((d && d.lessons) || 0) - P.base);
-    let fresh = state.nt.ids.filter(id => !state.prog[id]).length;
-    let rev = todayPlan(state, W, T).rev + state.nt.ids.filter(id => state.prog[id] && state.prog[id][1] <= T).length;
+  function planStatus(state, W, T) {
+    const P = dayPlan(state, W, T), ids = state.nt.ids;
+    const freshLeft = ids.filter(id => !state.prog[id]).length;
+    const newTotal = Math.ceil(ids.length / LESSON_NEW), newDone = newTotal - Math.ceil(freshLeft / LESSON_NEW);
+    const revLeft = todayPlan(state, W, T).rev + ids.filter(id => state.prog[id] && state.prog[id][1] <= T).length;
     const steps = [];
-    P.steps.forEach((kind, i) => {
-      if (i < done) { steps.push({ kind, done: true }); return; }
-      let k = kind;
-      if (k === 'rev' && !rev && fresh) k = 'new';
-      if (k === 'new' && !fresh) k = 'rev';
-      const nNew = k === 'new' ? Math.min(LESSON_NEW, fresh) : 0, nRev = Math.min(k === 'new' ? LESSON_REV : REVIEW_LESSON, rev);
-      if (!nNew && !nRev) return;
-      fresh -= nNew; rev -= nRev;
-      steps.push({ kind: k, nNew, nRev, done: false });
-    });
+    let f = freshLeft, rv = revLeft;
+    for (let i = 0; i < newTotal; i++) {
+      if (i < newDone) { steps.push({ kind: 'new', done: true }); continue; }
+      const nNew = Math.min(LESSON_NEW, f), nRev = Math.min(LESSON_REV, rv);
+      f -= nNew; rv -= nRev;
+      steps.push({ kind: 'new', nNew, nRev, done: false });
+    }
+    // the review step counts only what the new-word lessons still ahead will not take (5 each)
+    const pendingNew = steps.filter(x => x.kind === 'new' && !x.done).length;
+    const left = revLeft - Math.min(revLeft, pendingNew * LESSON_REV);
+    const total = Math.max(left, P.rev0 - newTotal * LESSON_REV);
+    if (total > 0) steps.push({ kind: 'rev', done: revLeft === 0, nNew: 0, nRev: Math.min(REVIEW_LESSON, left || revLeft), left, total });
     const next = steps.findIndex(x => !x.done);
-    return { steps, next, finished: next < 0, extra: done > P.steps.length ? done - P.steps.length : 0, left: { rev, fresh }, cut: P.cut };
+    return { steps, next, finished: next < 0, left: { rev: revLeft, fresh: freshLeft } };
   }
   function statusOf(state, id) {
     const p = state.prog[id];
@@ -348,7 +341,7 @@ const Logic = (() => {
       kind: 'lesson', v: 3, T, no: ((d && d.lessons) || 0) + 1, created: Date.now(), steps, i: 0, base: steps.length, fin: 0,
       newIds: fresh, revIds: rev,
       seen: {}, failed: {}, done: {},
-      stat: { firstOk: 0, firstN: 0, xp: 0, combo: 0, maxCombo: 0, ms: 0 },
+      drop: {}, stat: { firstOk: 0, firstN: 0, xp: 0, combo: 0, maxCombo: 0, ms: 0 },
     };
   }
   function lessonUnits(L) {   // screens finished, for the progress bar; a miss counts once its retry is done
@@ -369,7 +362,7 @@ const Logic = (() => {
     const p = state.prog[id];
     let [box, due, reps, lapses] = p ? p.slice(0, 4) : [0, T, 0, 0];
     if (correct) {
-      box = L.failed[id] || isNew || !p ? 1 : Math.min(box + 1, MAXBOX);
+      box = L.failed[id] ? ((L.drop && L.drop[id]) || 1) : isNew || !p ? 1 : Math.min(box + 1, MAXBOX);
       due = T + INTERVAL[box];
       reps++;
       L.done[id] = 1;
@@ -378,7 +371,9 @@ const Logic = (() => {
       if (L.stat.combo >= 5 && L.stat.combo % 5 === 0) res.xp += 2;
     } else {
       if (p && !isNew && first) lapses++;
-      box = 1;
+      L.drop = L.drop || {};
+      if (!st.r) L.drop[id] = Math.max(1, (p ? p[0] : 1) - 2);   // a miss drops two steps instead of starting over
+      box = st.r ? 1 : L.drop[id];
       due = st.r ? T + 1 : T;   // missed again on the retry: no more tries today, it comes back tomorrow
       L.failed[id] = 1;
       state.wrong[id] = [((state.wrong[id] || [0])[0] || 0) + 1, T];
@@ -452,7 +447,7 @@ const Logic = (() => {
       X.stat.combo = 0;
       state.wrong[st.id] = [((state.wrong[st.id] || [0])[0] || 0) + 1, X.T];
       const p = state.prog[st.id];
-      if (p) state.prog[st.id] = [1, X.T + 1, p[2], p[3] + 1, X.T];
+      if (p) state.prog[st.id] = [Math.max(1, p[0] - 2), X.T + 1, p[2], p[3] + 1, X.T];
       if (!ds.miss.includes(st.id)) ds.miss.push(st.id);
     }
     X.stat.xp += res.xp; addXp(state, ds, res.xp);

@@ -191,7 +191,7 @@ for (const id of worst.lesson.newIds) assert.deepStrictEqual(s5.prog[id].slice(0
 assert.strictEqual(L.sanitize({ lesson: { kind: 'lesson', T: T0, steps: [{ k: 'learn', id: '1-1' }, { k: 'q', id: '1-1' }], i: 1 } }, W).lesson, null);
 assert.ok(L.sanitize({ lesson: { kind: 'lesson', T: T0, steps: [{ k: 'learn', id: '1-1' }], i: 1 } }, W).lesson);
 
-// 3b) today's plan: fixed lessons, reviews first, new words cut when reviews pile up
+// 3b) today's plan: the chosen new words every day, then every review that is due; a miss drops two steps
 function runPlanDay(state, T, pCorrect) {
   let guard = 0;
   while (true) {
@@ -199,29 +199,38 @@ function runPlanDay(state, T, pCorrect) {
     if (ps.finished) return ps;
     const x = ps.steps[ps.next];
     const { lesson } = runLesson(state, T, pCorrect, { kind: x.kind });
-    assert.ok(lesson.newIds.length === x.nNew && lesson.revIds.length <= x.nRev + 5, 'lesson matches its step');
-    assert.ok(++guard <= 10, 'the plan finishes');
+    assert.ok(lesson.newIds.length === x.nNew, 'lesson matches its step');
+    assert.ok(++guard <= 60, 'the plan finishes');
   }
 }
 const s6 = L.newState();
 const p0 = L.planStatus(s6, W, T0);
 assert.deepStrictEqual(p0.steps.map(x => x.kind + x.nNew + '/' + x.nRev), ['new5/0', 'new5/0'], 'first day: two new-word lessons');
 runPlanDay(s6, T0, 1);
-assert.ok(L.planStatus(s6, W, T0).finished && s6.days[L.dayKey(T0)].lessons === 2);
-let learnedAt = [], maxSteps = 0, maxLeft = 0;
+assert.ok(L.planStatus(s6, W, T0).finished);
+let notes = [], maxDue = 0;
 for (let day = 1; day <= 60; day++) {
-  const T = T0 + day, ps = runPlanDay(s6, T, 0.8), plan = s6.today;
-  maxSteps = Math.max(maxSteps, plan.steps.length); maxLeft = Math.max(maxLeft, ps.left.rev);
-  assert.ok(plan.steps.length <= s6.settings.lessons, 'never more lessons than the setting');
-  if ([10, 30, 60].includes(day)) learnedAt.push(`day ${day}: ${Object.keys(s6.prog).length} words started, reviews left over ${ps.left.rev}`);
+  const T = T0 + day, before = Object.keys(s6.prog).length;
+  maxDue = Math.max(maxDue, L.planStatus(s6, W, T).left.rev);
+  runPlanDay(s6, T, 0.8);
+  assert.strictEqual(Object.keys(s6.prog).length - before, 10, 'ten new words every day');
+  if ([10, 30, 60].includes(day)) notes.push(`day ${day}: ${Object.keys(s6.prog).length} words`);
 }
-console.log('plan (3 lessons, up to 10 new, 80% right):', learnedAt.join(' | '), '| most lessons in a day', maxSteps);
-// a backlog: 55 reviews due -> three review lessons, no new words, 25 wait for tomorrow
+console.log('plan (10 new a day, all reviews, 80% right):', notes.join(' | '), '| most reviews due in a day', maxDue);
+// a backlog of 55 reviews keeps both new-word lessons and puts all 55 reviews in one step
 const s7 = L.newState(); let k7 = 0;
-for (const e of W.words) { if (k7 >= 55) break; s7.prog[e.id] = [2, T0, 1, 0, T0 - 3]; k7++; }
+for (const e of W.words) { if (k7 >= 55) break; s7.prog[e.id] = [4, T0, 3, 0, T0 - 16]; k7++; }
 const p7 = L.planStatus(s7, W, T0);
-assert.deepStrictEqual(p7.steps.map(x => x.kind), ['rev', 'rev', 'rev']);
-assert.ok(p7.left.rev === 25 && p7.cut === 10);
+assert.deepStrictEqual(p7.steps.map(x => x.kind), ['new', 'new', 'rev']);
+assert.ok(p7.steps[2].total === 45 && p7.steps[2].left === 45, 'the review step leaves out the 10 reviews the new-word lessons take');
+// soft drop: a box-4 word missed and then right on the retry comes back in 3 days (box 2), not tomorrow
+const les7 = L.buildLesson(s7, W, T0, { kind: 'rev' });
+const q7 = les7.steps.findIndex(x => x.k === 'q'); les7.i = q7; const id7 = les7.steps[q7].id;
+L.answerLesson(s7, les7, false);
+assert.deepStrictEqual(s7.prog[id7].slice(0, 2), [2, T0]);
+les7.i = les7.steps.findIndex((x, j) => j > q7 && x.id === id7 && x.r);
+L.answerLesson(s7, les7, true);
+assert.deepStrictEqual(s7.prog[id7].slice(0, 2), [2, T0 + 3]);
 
 // 4) tests
 const s3 = L.newState();

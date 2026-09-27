@@ -83,8 +83,9 @@ svg{display:block}
 .ibtn svg{width:26px;height:26px}
 .card,.panel{background:var(--surface);border:2px solid var(--line);border-radius:var(--r);box-shadow:0 4px 0 var(--line)}
 .sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:6px}
-.sec h2{font-size:19px;font-weight:900}
+.sec h2{font-size:19px;font-weight:900;white-space:nowrap}
 .sec span,.sec button{font-size:14px;color:var(--ink-2);font-weight:700}
+.sec span{text-align:right}
 .eyebrow{font-size:13px;font-weight:800;color:var(--ink-3);letter-spacing:.02em}
 
 /* chunky buttons */
@@ -577,7 +578,7 @@ details.more[open] summary::after{content:" ▴"}
 <div class="toast" id="toast" role="status" hidden></div>
 <canvas id="confetti" hidden></canvas>
 <input type="file" id="filePick" class="vh" tabindex="-1" aria-hidden="true">
-<script>window.__CV__ = {"mode": "pwa", "version": "2.0.11", "crypto": {"salt": "5XuliZAP9T9FrI1CC7f7sg==", "iter": 600000}, "data": {"words": "data/words.bin", "rev": "cb50622ae41f"}, "audio": {"base": "data/audio/", "enc": true, "v": "5c2459ab44", "days": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}};</script>
+<script>window.__CV__ = {"mode": "pwa", "version": "2.0.12", "crypto": {"salt": "5XuliZAP9T9FrI1CC7f7sg==", "iter": 600000}, "data": {"words": "data/words.bin", "rev": "cb50622ae41f"}, "audio": {"base": "data/audio/", "enc": true, "v": "5c2459ab44", "days": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]}};</script>
 <script></script>
 <script>
 /* 초록 보카 core logic: words, spaced repetition, question generation, lessons and tests.
@@ -787,7 +788,7 @@ const Logic = (() => {
     }
     out.prog = prog;
     for (const key of ['stars', 'wrong', 'days', 'spots', 'seenTypes']) if (!out[key] || typeof out[key] !== 'object' || Array.isArray(out[key])) out[key] = {};
-    if (out.today && (typeof out.today.d !== 'number' || !Array.isArray(out.today.steps))) out.today = null;
+    if (out.today && (typeof out.today.d !== 'number' || out.today.v !== 2 || typeof out.today.rev0 !== 'number')) out.today = null;   // keep today's plan across reloads
     if (!Array.isArray(out.tests)) out.tests = [];
     // a half-done lesson from before short lessons is dropped; its answers are already in prog
     if (out.lesson && out.lesson.v !== 3 && out.lesson.i < (out.lesson.steps || []).length) out.lesson = null;

@@ -205,7 +205,7 @@ const Logic = (() => {
     }
     out.prog = prog;
     for (const key of ['stars', 'wrong', 'days', 'spots', 'seenTypes']) if (!out[key] || typeof out[key] !== 'object' || Array.isArray(out[key])) out[key] = {};
-    if (out.today && (typeof out.today.d !== 'number' || !Array.isArray(out.today.steps))) out.today = null;
+    if (out.today && (typeof out.today.d !== 'number' || out.today.v !== 2 || typeof out.today.rev0 !== 'number')) out.today = null;   // keep today's plan across reloads
     if (!Array.isArray(out.tests)) out.tests = [];
     // a half-done lesson from before short lessons is dropped; its answers are already in prog
     if (out.lesson && out.lesson.v !== 3 && out.lesson.i < (out.lesson.steps || []).length) out.lesson = null;

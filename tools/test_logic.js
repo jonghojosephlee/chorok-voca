@@ -187,6 +187,13 @@ assert.strictEqual(worst.lesson.steps.length, worst.lesson.base + 5);
 assert.strictEqual(worst.lesson.steps[worst.lesson.steps.length - 1].k, 'match');
 for (const id of worst.lesson.newIds) assert.deepStrictEqual(s5.prog[id].slice(0, 2), [1, T0 + 1]);
 
+// today's plan survives a reload: a finished review step stays on the list
+{ const s8 = L.newState(); let k8 = 0;
+  for (const e of W.words) { if (k8 >= 30) break; s8.prog[e.id] = [3, T0, 2, 0, T0 - 7]; k8++; }
+  L.planStatus(s8, W, T0);
+  for (const id of Object.keys(s8.prog)) s8.prog[id][1] = T0 + 7;
+  const kinds = st => L.planStatus(st, W, T0).steps.map(x => x.kind + (x.done ? '+' : '')).join(' ');
+  assert.strictEqual(kinds(L.sanitize(JSON.parse(JSON.stringify(s8)), W)), kinds(s8), 'plan kept across reload'); }
 // a half-done lesson saved by the old version is dropped; a finished one is kept so it can be settled
 assert.strictEqual(L.sanitize({ lesson: { kind: 'lesson', T: T0, steps: [{ k: 'learn', id: '1-1' }, { k: 'q', id: '1-1' }], i: 1 } }, W).lesson, null);
 assert.ok(L.sanitize({ lesson: { kind: 'lesson', T: T0, steps: [{ k: 'learn', id: '1-1' }], i: 1 } }, W).lesson);

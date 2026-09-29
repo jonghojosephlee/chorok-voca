@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(S, 'friend'))
 import pron   # misaki phonemes -> IPA, shared with 노랭이 보카
 DIST = os.path.join(HERE, 'dist')
 VERSION = '2.1.' + os.environ.get('BUILD_N', '0')
+SYNC_ON = False
 ITER = 600_000
 
 # ---- words ----
@@ -96,6 +97,11 @@ aes = AESGCM(key)
 def seal(data):
     iv = secrets.token_bytes(12)
     return b'CVE1' + iv + aes.encrypt(iv, data, None)
+def unseal(b):
+    assert b[:4] == b'CVE1'
+    return aes.decrypt(b[4:16], b[16:], None)
+sys.path.insert(0, os.path.join(S, 'shared'))
+import sync_build   # friend progress + study reminders (voca-sync)
 
 # ---- page assembly ----
 shell = open(os.path.join(SRC, 'shell.html')).read()
@@ -147,6 +153,8 @@ def build_pwa():
     audio = {'base': 'data/audio/', 'enc': True, 'v': AUDIO_V, 'vs': AUDIO_VS, 'days': days, 'mb': max(1, round(tot / 1e6))}
     if xpacks: audio.update(xs=AUDIO_XS, xmb=max(1, round(xtot / 1e6)))
     cfg = {'mode': 'pwa', 'version': VERSION, 'app': APP, 'crypto': {'salt': sec['salt'], 'iter': ITER}, 'data': {'words': 'data/words.bin', 'rev': rev}, 'audio': audio}
+    global SYNC_ON
+    SYNC_ON = bool(sync_build.add(cfg, 'chorok', out, os.path.join(S, 'pwa'), seal, unseal))
     html = page(PWA_HEAD, '</head>\n<body>', '</body>\n</html>\n', cfg, '')
     open(os.path.join(out, 'index.html'), 'w').write(html)
     digest = hashlib.sha256(html.encode() + words_bin).hexdigest()[:10]
@@ -179,4 +187,4 @@ if __name__ == '__main__':
     p = build_pwa(); a = build_artifact()
     tot = sum(len(b) for b in packs.values()); xt = sum(len(b) for b in xpacks.values())
     print('built', VERSION, '| words', len(rows), '| examples', len(examples), '| 풀이', len(howto), '| example clips', n_ex, '| word packs', len(packs), f'{tot/1e6:.1f} MB', '| example packs', len(xpacks), f'{xt/1e6:.1f} MB', '| pwa', p, '| artifact', a)
-    print('code', sec['code'][:4] + '-' + sec['code'][4:])
+    print('code', sec['code'][:4] + '-' + sec['code'][4:], '| friend sync', 'on' if SYNC_ON else 'off (no token)')

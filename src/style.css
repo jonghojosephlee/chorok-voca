@@ -515,6 +515,25 @@ select{font-size:16px;font-weight:800;padding:9px 12px;border-radius:12px;border
 .plan li.done{color:var(--ink-3)}
 .plan li.done span{text-decoration:line-through;text-decoration-thickness:2px}
 .plan li.done i{background:var(--green-btn);color:#fff}
+/* today's plan: a ring cut into its parts, the character inside */
+.today-ring{position:relative;width:112px;height:112px;flex:none;display:grid;place-items:center}
+.today-ring .pring{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.today-ring .mascot{width:72px;height:72px}
+.today-ring.big{width:168px;height:168px}
+.today-ring.big .mascot{width:112px;height:112px}
+.pring .tr{stroke:var(--surface-3)}
+.pring .on{stroke:var(--green)}
+.pring .grow{transition:stroke-dashoffset .9s cubic-bezier(.3,.8,.3,1) .35s}
+@media (prefers-reduced-motion: reduce){.pring .grow{transition:none}}
+.hero .charrow{align-items:center}
+/* card sorting: how many went to each side */
+.sortbar{display:flex;justify-content:space-between;gap:10px;margin:-6px 2px -4px}
+.pile{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:999px;font-size:14px;font-weight:900;border:2px solid}
+.pile svg{width:15px;height:15px}
+.pile b{font-variant-numeric:tabular-nums}
+.pile.dont{color:var(--red-ink);border-color:var(--red);background:var(--red-soft)}
+.pile.know{color:var(--green-ink);border-color:var(--green);background:var(--green-soft)}
+.row > .btn{flex:1}
 details.more{border-top:2px dashed var(--line);padding-top:10px}
 details.more summary{cursor:pointer;list-style:none;text-align:center;font-size:15px;font-weight:800;color:var(--ink-2);padding:4px}
 details.more summary::-webkit-details-marker{display:none}
@@ -539,6 +558,15 @@ details.more[open] summary::after{content:" ▴"}
 .kmean{display:flex;align-items:center;gap:10px}
 .kmean .ko{flex:1;min-width:0;font-size:20px;font-weight:900;line-height:1.4}
 .syn2{font-size:14.5px;font-weight:700;color:var(--ink-2)}
+.kmean .pk{flex:none;min-width:30px;height:30px;padding:0 8px;border-radius:9px;display:grid;place-items:center;font-size:14px;font-weight:900;background:var(--gold-soft);color:var(--gold-ink)}
+details.exfold{border-radius:14px;background:var(--surface-2);padding:2px 12px}
+details.exfold > summary{cursor:pointer;list-style:none;font-size:15px;font-weight:900;color:var(--blue);padding:10px 0;text-align:center}
+details.exfold > summary::-webkit-details-marker{display:none}
+details.exfold > summary::after{content:" ▾"}
+details.exfold[open] > summary::after{content:" ▴"}
+details.exfold .exbox{padding-bottom:12px}
+details.exfold .exbox .no{margin-bottom:2px}
+details.exfold details.howto{background:var(--surface)}
 .syn2 span{font-weight:800;color:var(--ink)}
 .exbox{border-top:2px dashed var(--line);padding-top:12px;display:flex;flex-direction:column;gap:5px}
 .exrow{display:flex;align-items:flex-start;gap:10px}

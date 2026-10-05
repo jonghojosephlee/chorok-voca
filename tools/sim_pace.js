@@ -1,26 +1,30 @@
-// If you pick N new words a day and clear every review: how many screens a day, with a full reset vs a softer drop on a miss?
-// Standalone model of the Leitner ladder used by the app (same intervals), one review question per due word.
-const INTERVAL = [0, 1, 3, 7, 16, 35, 80, 180];
-function sim(N, acc, lapse, days = 240, seed = 7) {
+// node sim_pace.js [words] [--json] — what the daily settings give over 90 days under the app's own plan (logic.js):
+// N new words a day + at most revDay reviews in 3 parts (+ waiting reviews in the pairs rounds; the pair left last earns nothing),
+// 80% right, stand-in words.
+// The settings screen shows these numbers (build: CFG.app.pace[N][revDay] = [screens a day low, high, % of words at step 3+]).
+const L = require(process.env.LOGIC || '../src/logic.js');
+const BOOK = Number(process.argv[2]) || 1813, JSON_OUT = process.argv.includes('--json');
+const rows = Array.from({ length: BOOK }, (_, i) => [Math.floor(i / 60) + 1, (i % 60) + 1, 'w' + i, [['s' + i, '뜻' + i]]]);
+const W = L.prepare(rows);
+function sim(N, cap, acc = 0.8, days = 90, seed = 7) {
   let r = seed; const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
-  const words = []; let started = 0; const perDay = [];
-  for (let T = 0; T < days; T++) {
-    let reviews = 0, retries = 0;
-    for (const w of words) {
-      if (w.due > T) continue;
-      reviews++;
-      if (rnd() < acc) { w.box = Math.min(w.box + 1, 7); w.due = T + INTERVAL[w.box]; }
-      else { retries++; w.box = lapse === 'reset' ? 1 : Math.max(1, w.box - 2); w.due = T + INTERVAL[w.box]; }
+  L.seed(seed);
+  const s = L.newState(); s.settings.daily = N; s.settings.revDay = cap;
+  const T0 = 20000, screens = [];
+  for (let d = 0; d < days; d++) {
+    const T = T0 + d; let n = 0;
+    for (let g = 0; g < 5 && !L.planStatus(s, W, T).finished; g++) {
+      const les = L.buildLesson(s, W, T, { hasAudio: true });
+      while (les.i < les.steps.length) { const st = les.steps[les.i]; if (st.k === 'match') { const last = st.ids[Math.floor(rnd() * st.ids.length)]; L.answerMatch(s, les, 0, (st.wr || []).filter(id => id !== last && rnd() < acc)); } else L.answerLesson(s, les, st.k === 'learn' || rnd() < acc); }
+      n += les.steps.length;
+      L.finishLesson(s, W, les);
     }
-    let fresh = 0;
-    while (fresh < N && started < 1813) { words.push({ box: 1, due: T + 1 }); started++; fresh++; }
-    perDay.push({ reviews, screens: reviews + retries + fresh * 2 + Math.ceil((fresh + reviews) / 10) });
+    screens.push(n);
   }
-  const avg = (a, b) => Math.round(perDay.slice(a, b).reduce((s, x) => s + x.screens, 0) / (b - a));
-  const peak = Math.max(...perDay.map(x => x.screens));
-  return { bookDays: Math.ceil(1813 / N), d30: avg(20, 30), d90: avg(80, 90), d180: avg(170, 180), peak };
+  const ps = Object.values(s.prog), late = screens.slice(30);
+  return [Math.min(...late), Math.max(...late), Math.round(ps.filter(p => p[0] >= 3).length / Math.max(1, ps.length) * 100)];
 }
-for (const acc of [0.8, 0.9]) for (const N of [5, 10, 15, 20]) {
-  const a = sim(N, acc, 'reset'), b = sim(N, acc, 'soft');
-  console.log(`acc ${acc} | ${String(N).padStart(2)} new/day → book ${a.bookDays} days | screens/day around day 30/90/180: reset ${a.d30}/${a.d90}/${a.d180} (peak ${a.peak}) · soft ${b.d30}/${b.d90}/${b.d180} (peak ${b.peak})`);
-}
+const table = {};
+for (const N of L.DAILY) { table[N] = {}; for (const cap of L.REV_OPTS) table[N][cap] = sim(N, cap); }
+if (JSON_OUT) console.log(JSON.stringify(table));
+else for (const N of L.DAILY) console.log(`${N} new/day (book ${Math.ceil(BOOK / N)} days): ` + L.REV_OPTS.map(c => `reviews ${c} → ${table[N][c][0]}-${table[N][c][1]} screens a day, ${table[N][c][2]}% at step 3+ on day 90`).join(' | '));

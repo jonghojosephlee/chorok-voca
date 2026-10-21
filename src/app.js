@@ -1008,7 +1008,7 @@ function showFb(ok, st, res) {
   const right = q.t === 'multi' ? q.ans.map(i => q.opts[i]).join(' · ') : q.t === 'mcq-ko' || q.t === 'listen' ? e.senses[q.si].ko : q.t === 'syn' || q.t === 'ctx' ? q.opts[q.a] : e.w;
   const si = q.si != null ? q.si : 0, sense = e.senses[si] || {};
   const ex = sense.ex && (inSent || !ok) ? `<div class="ex"><div class="exrow"><p lang="en">${exMarked(e, si)}</p><button class="say sm" type="button" data-act="sayEx" data-id="${e.id}" data-si="${si}" aria-label="예문 듣기">${I.speaker}</button></div>${sense.exKo ? `<small>${esc(sense.exKo)}</small>` : ''}${!ok ? howtoHTML(e, si) : ''}</div>` : '';
-  const ans = `<div class="ans">${!ok && !typed && q.t !== 'card' ? `<div>정답: <b>${esc(right)}</b></div>` : ''}<div><span class="w" lang="en">${esc(e.w)}</span> <span class="m">${esc(meaningLine(e))}</span></div>${ex}</div>`;
+  const ans = `<div class="ans">${!ok && !typed && q.t !== 'card' ? `<div>정답: <b>${esc(right)}</b></div>` : ''}<div class="answ"><button class="wsay" type="button" data-act="say" data-id="${e.id}" aria-label="${esc(e.w)} 발음 다시 듣기"><span class="w" lang="en">${esc(e.w)}</span>${I.speaker}</button> <span class="m">${esc(meaningLine(e))}</span></div>${ex}</div>`;   // the word plays again on a tap
   $('fbIn').innerHTML = head + ans + `<button class="btn ${ok ? '' : 'bad'}" type="button" data-act="cont">계속</button>`;
   const fb = $('fb');
   fb.classList.toggle('bad', !ok);
@@ -1891,7 +1891,7 @@ document.addEventListener('keydown', ev => {
       if (ev.key === 'Enter' && !ev.isComposing && ev.target.id === 'spellIn') { ev.preventDefault(); if (fbOpen) cont(); else spellGo(); }
       return;
     }
-    if (fbOpen) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); cont(); } return; }
+    if (fbOpen) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); cont(); } else if ((ev.key === 's' || ev.key === 'S') && st) Voice.play(st.id); return; }
     if (!st) return;
     if (st.k === 'learn') { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); nextLearn(); } }
     else if (st.q && st.q.t === 'card') {
